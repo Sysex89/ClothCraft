@@ -7,6 +7,34 @@ use clothcraft::garment::presets::GarmentKind;
 use cssimpler::core::Node;
 use cssimpler::ui;
 
+/// An import quick action shown in the left browser.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(in super::super) struct ImportQuickAction {
+    pub label: &'static str,
+    pub tooltip: &'static str,
+}
+
+/// Import quick actions for the native workspace. None is wired yet: the CPU
+/// importers exist (`pattern_import`, `garment::svg_import`, `avatar_import`)
+/// but the native dialogs were not ported after FC-0022, so the buttons render
+/// disabled and the tooltip names the working alternative.
+pub(in super::super) fn import_quick_actions() -> [ImportQuickAction; 3] {
+    [
+        ImportQuickAction {
+            label: "DXF",
+            tooltip: "DXF import is not available in this window yet",
+        },
+        ImportQuickAction {
+            label: "SVG",
+            tooltip: "SVG import is not available in this window yet",
+        },
+        ImportQuickAction {
+            label: "Avatar",
+            tooltip: "Not available in this window yet; start cloth-fit with --avatar <file.obj|.gltf|.glb>",
+        },
+    ]
+}
+
 pub(in super::super) fn build_runner_left_browser(state: &CssRunnerState) -> Node {
     if !state.left_drawer_open || state.clean_view {
         return ui! { <aside class="left-drawer collapsed"></aside> };
@@ -90,9 +118,12 @@ pub(in super::super) fn build_runner_left_browser(state: &CssRunnerState) -> Nod
                     <div class="quick-action-group">
                         <span class="group-label">"Import"</span>
                         <div class="quick-actions-row">
-                            <button class="btn-action" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::StatusNote("Use CLI --project or File menu to import DXF".into()))}>"DXF"</button>
-                            <button class="btn-action" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::StatusNote("Use CLI or File menu to import SVG".into()))}>"SVG"</button>
-                            <button class="btn-action" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::StatusNote("Use CLI --avatar to swap mannequin OBJ".into()))}>"Avatar"</button>
+                            {import_quick_actions()
+                                .into_iter()
+                                .map(|action| ui! {
+                                    <button class="btn-action disabled" title={action.tooltip}>{action.label}</button>
+                                })
+                                .collect::<Vec<_>>()}
                         </div>
                     </div>
                     <div class="quick-action-group">

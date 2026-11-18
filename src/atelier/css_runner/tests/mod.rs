@@ -1,5 +1,6 @@
 //! Runner regressions grouped by board, shell and simulation behavior.
 
+pub(super) mod asset_browser;
 pub(super) mod board;
 pub(super) mod inspector;
 pub(super) mod documents;

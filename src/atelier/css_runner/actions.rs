@@ -92,6 +92,10 @@ pub enum RunnerAction {
 #[derive(Clone, Debug, PartialEq)]
 pub enum RunnerUiOp {
     SetNumber(super::ui::number::NumberField, f64),
+    /// End the pending Arrange edit; queued after the values it should include.
+    CommitPlacement,
+    /// Discard the pending Arrange edit; queued after the values it discards.
+    CancelPlacement,
     MeshLevel(u8),
     MeshToggle(usize),
     MeshChoosePath(String),
@@ -125,7 +129,9 @@ pub enum RunnerUiOp {
     ImportToggleAck,
     ImportApply,
     ImportCancel,
-    ConfirmSew { ease: bool },
+    ConfirmSew {
+        ease: bool,
+    },
     CancelSew,
 }
 
@@ -429,9 +435,14 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
                     state.corner_mode_radius = false;
                     state.corner_preview_active = true;
                 }
-                NumberField::Placement(axis) => {
+                NumberField::Placement { ref panel, axis } => {
                     let (min, max, _, _) = field.spec();
-                    super::placement::set_placement_draft(state, axis, value.clamp(min, max));
+                    super::placement::set_placement_draft(
+                        state,
+                        panel,
+                        axis,
+                        value.clamp(min, max),
+                    );
                 }
                 NumberField::ImportTolerance => state.import_tolerance_mm = value.clamp(0.01, 5.0),
                 NumberField::ImportMesh => state.import_mesh_mm = value.clamp(3.0, 500.0),
@@ -439,6 +450,12 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
                     state.import_scale_mm_per_unit = value.clamp(0.0, 1000.0)
                 }
             }
+        }
+        RunnerUiOp::CommitPlacement => {
+            super::placement::commit_placement_draft(state);
+        }
+        RunnerUiOp::CancelPlacement => {
+            super::placement::cancel_placement_draft(state);
         }
         RunnerUiOp::MeshToggleOpen => {
             state.mesh_draft.open = !state.mesh_draft.open;

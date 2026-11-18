@@ -411,10 +411,13 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
     };
 
     // Accordion 2: 3D Arrangement. Each field edits a draft that becomes one
-    // Command::Place when the drag or text edit ends (see `placement`).
+    // Command::Place when the drag or text edit ends (see `placement`). Fields
+    // name the piece they were built for, so queued edits keep their target.
+    let arrange_panel: Option<std::sync::Arc<str>> = selected_panel.map(|p| p.id.as_str().into());
     let arrange_rows: Vec<Node> = PlacementAxis::ALL
         .into_iter()
-        .map(|axis| {
+        .filter_map(|axis| {
+            let panel = arrange_panel.clone()?;
             let (id, label) = match axis {
                 PlacementAxis::TranslationX => ("arrange-tx", "Translation X (cm)"),
                 PlacementAxis::TranslationY => ("arrange-ty", "Translation Y (cm)"),
@@ -423,12 +426,12 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
                 PlacementAxis::RotationY => ("arrange-ry", "Rotation Y (°)"),
                 PlacementAxis::RotationZ => ("arrange-rz", "Rotation Z (°)"),
             };
-            ui! {
+            Some(ui! {
                 <div class="prop-row">
                     <span class="prop-label">{label}</span>
-                    {number_field(state, id, NumberField::Placement(axis))}
+                    {number_field(state, id, NumberField::Placement { panel, axis })}
                 </div>
-            }
+            })
         })
         .collect();
 

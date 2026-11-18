@@ -36,9 +36,10 @@ pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
 fn route_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
     use std::sync::atomic::Ordering;
     let text_editing = state.numeric_input_active.load(Ordering::Relaxed);
-    // A pending Arrange edit is committed before a new press can change the
-    // selection, because Command::Place selects the piece it places.
-    if state.placement_draft.is_some()
+    // A press ends the pending Arrange edit. The commit is queued behind any
+    // keystrokes still waiting, so they are included; it may run after the
+    // press changed the selection, which the commit keeps.
+    if (text_editing || state.placement_draft.is_some())
         && matches!(
             event,
             EngineEvent::PointerButton {
@@ -46,9 +47,10 @@ fn route_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
                 ..
             }
         )
-        && state.number_drag.lock().unwrap().active.is_none()
     {
-        super::placement::commit_placement_draft(state);
+        state.actions.push(super::actions::RunnerAction::Ui(
+            super::actions::RunnerUiOp::CommitPlacement,
+        ));
     }
     if number::handle_number_event(state, event) {
         return true;
@@ -80,10 +82,13 @@ fn route_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
         return false;
     }
     if matches!(event, EngineEvent::Key(_)) && text_editing {
-        // Enter applies a typed placement; the text field keeps focus.
+        // Enter applies a typed placement; the text field keeps focus. The
+        // commit is queued behind the keystrokes it applies.
         if matches!(event, EngineEvent::Key(k) if k.state == cssimpler::renderer::ButtonState::Pressed && k.logical_key == cssimpler::renderer::KeyIdentity::Named("Enter".into()))
         {
-            super::placement::commit_placement_draft(state);
+            state.actions.push(super::actions::RunnerAction::Ui(
+                super::actions::RunnerUiOp::CommitPlacement,
+            ));
         }
         return false;
     }

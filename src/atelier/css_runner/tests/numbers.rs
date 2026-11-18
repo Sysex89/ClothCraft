@@ -145,17 +145,24 @@ fn numeric_input_uses_native_text_editing_and_clamps_model_values() {
         "typing must not trigger zoom shortcuts"
     );
     assert!(app.state().numeric_input_active.load(Ordering::Relaxed));
+    let panel: std::sync::Arc<str> = app.state().project.template.panels[0].id.as_str().into();
     for (field, value, expected) in [
         (NumberField::ZoomSpeed, 99.0, 4.0),
         (NumberField::CornerRadius, -5.0, 1.0),
         (NumberField::CornerTension, 5.0, 1.5),
         (
-            NumberField::Placement(PlacementAxis::TranslationX),
+            NumberField::Placement {
+                panel: panel.clone(),
+                axis: PlacementAxis::TranslationX,
+            },
             999.0,
             300.0,
         ),
         (
-            NumberField::Placement(PlacementAxis::RotationZ),
+            NumberField::Placement {
+                panel: panel.clone(),
+                axis: PlacementAxis::RotationZ,
+            },
             -400.0,
             -180.0,
         ),
@@ -163,12 +170,12 @@ fn numeric_input_uses_native_text_editing_and_clamps_model_values() {
         (NumberField::ImportMesh, -5.0, 3.0),
         (NumberField::ImportScale, -5.0, 0.0),
     ] {
-        apply_runner_ui_op(app.state_mut(), RunnerUiOp::SetNumber(field, value));
+        apply_runner_ui_op(app.state_mut(), RunnerUiOp::SetNumber(field.clone(), value));
         let actual = match field {
             NumberField::ZoomSpeed => app.state().board_2d_zoom_speed,
             NumberField::CornerRadius => app.state().corner_radius_mm,
             NumberField::CornerTension => app.state().corner_tension,
-            NumberField::Placement(axis) => placement_value(app.state(), axis),
+            NumberField::Placement { panel, axis } => placement_value(app.state(), &panel, axis),
             NumberField::ImportTolerance => app.state().import_tolerance_mm,
             NumberField::ImportMesh => app.state().import_mesh_mm,
             NumberField::ImportScale => app.state().import_scale_mm_per_unit,
@@ -224,9 +231,9 @@ fn control_drag_exposes_finer_decimal_places_for_zoom_and_tension() {
         (NumberField::ZoomSpeed, 1.5, "1.525"),
         (NumberField::CornerTension, 0.5, "0.505"),
     ] {
-        apply_runner_ui_op(&mut state, RunnerUiOp::SetNumber(field, start));
+        apply_runner_ui_op(&mut state, RunnerUiOp::SetNumber(field.clone(), start));
         handle_runner_event(&mut state, &pointer_move_ev(0.0, 100.0));
-        press_handle(&state, field);
+        press_handle(&state, field.clone());
         let movement = EngineEvent::PointerMoved {
             position: cssimpler::renderer::PointerPosition { x: 0.0, y: 96.0 },
             modifiers: cssimpler::renderer::KeyboardModifiers {

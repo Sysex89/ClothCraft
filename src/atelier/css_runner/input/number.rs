@@ -1,6 +1,6 @@
 //! ClothCraft drag handles; cssimpler owns native text editing.
 use super::super::{
-    actions::{RunnerUiOp, apply_runner_ui_op},
+    actions::{RunnerAction, RunnerUiOp, apply_runner_ui_op},
     state::CssRunnerState,
     ui::number::NumberField,
 };
@@ -42,7 +42,18 @@ fn move_value(
     drag.value = (drag.value + steps * step * multiplier).clamp(min, max);
     // Keep precision from fine drags when modifiers are released. Never round
     // to the normal step, which would discard Ctrl's smaller increments.
-    Some((drag.field, drag.value))
+    Some((drag.field.clone(), drag.value))
+}
+
+/// Apply a drag edit. Placement edits join the action queue so they stay
+/// ordered with typed values and with Enter/Escape; see `placement`.
+fn apply_number_edit(state: &mut CssRunnerState, field: NumberField, value: f64) {
+    let op = RunnerUiOp::SetNumber(field, value);
+    if matches!(op, RunnerUiOp::SetNumber(NumberField::Placement { .. }, _)) {
+        state.actions.push(RunnerAction::Ui(op));
+    } else {
+        apply_runner_ui_op(state, op);
+    }
 }
 
 pub(in super::super) fn handle_number_event(
@@ -115,7 +126,10 @@ pub(in super::super) fn handle_number_event(
             if state.numeric_input_active.swap(false, Ordering::Relaxed) {
                 state.settings_open = false;
                 // Escape leaves the field without applying a typed placement.
-                state.placement_draft = None;
+                // Queued after the keystrokes it discards.
+                state
+                    .actions
+                    .push(RunnerAction::Ui(RunnerUiOp::CancelPlacement));
                 consumed = false;
             }
         }
@@ -132,7 +146,7 @@ pub(in super::super) fn handle_number_event(
     }
     drop(drag);
     if let Some((field, value)) = edit {
-        apply_runner_ui_op(state, RunnerUiOp::SetNumber(field, value));
+        apply_number_edit(state, field, value);
     }
     if let Some((mode, preview)) = cancelled_preview {
         state.corner_mode_radius = mode;
@@ -157,7 +171,7 @@ pub(in super::super) fn tick_number_drag(state: &mut CssRunnerState) -> bool {
     });
     drop(drag);
     if let Some((field, value)) = edit {
-        apply_runner_ui_op(state, RunnerUiOp::SetNumber(field, value));
+        apply_number_edit(state, field, value);
         true
     } else {
         false

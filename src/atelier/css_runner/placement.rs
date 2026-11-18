@@ -4,6 +4,12 @@
 //! The draft becomes a single `Command::Place` (one undo step, one restart of
 //! that piece) when the edit ends: the drag is released, the text field loses
 //! focus, Enter is pressed, or another pointer press begins. Escape discards it.
+//!
+//! Every draft change travels through the runner's action queue: field values
+//! as `SetNumber`, endings as `CommitPlacement` / `CancelPlacement`. The queue
+//! preserves event order, so a keystroke queued before Enter or Escape is
+//! applied first. Each value names the piece its field was built for, so a
+//! selection change between the event and its processing cannot retarget it.
 
 use super::editing::commit_authoring_command;
 use super::state::CssRunnerState;
@@ -72,46 +78,39 @@ fn same_placement(a: &Placement, b: &Placement) -> bool {
     a.translation == b.translation && a.rotation_degrees == b.rotation_degrees
 }
 
-/// Value shown in a placement field: the pending draft for the selected piece,
-/// otherwise the document's placement (zero when nothing is selected).
-pub fn placement_value(state: &CssRunnerState, axis: PlacementAxis) -> f64 {
-    let Some(panel) = state
-        .project
-        .template
-        .panels
-        .get(state.selected_piece_index)
-    else {
-        return 0.0;
-    };
+/// Value shown in a placement field for `panel`: its pending draft, otherwise
+/// the document's placement (zero if the piece no longer exists).
+pub fn placement_value(state: &CssRunnerState, panel: &str, axis: PlacementAxis) -> f64 {
     let placement = match &state.placement_draft {
-        Some(draft) if draft.panel_id == panel.id => &draft.placement,
-        _ => &panel.placement,
+        Some(draft) if draft.panel_id == panel => &draft.placement,
+        _ => match state.project.template.panels.iter().find(|p| p.id == panel) {
+            Some(p) => &p.placement,
+            None => return 0.0,
+        },
     };
     axis.get(placement)
 }
 
-/// Record a typed or dragged value in the selected piece's draft.
-pub fn set_placement_draft(state: &mut CssRunnerState, axis: PlacementAxis, value: f64) {
-    let Some(panel) = state
-        .project
-        .template
-        .panels
-        .get(state.selected_piece_index)
-    else {
-        return;
-    };
+/// Record a typed or dragged value in `panel`'s draft. A draft for another
+/// piece is committed first; values for a deleted piece are ignored.
+pub fn set_placement_draft(
+    state: &mut CssRunnerState,
+    panel: &str,
+    axis: PlacementAxis,
+    value: f64,
+) {
     if state
         .placement_draft
         .as_ref()
-        .is_none_or(|draft| draft.panel_id != panel.id)
+        .is_none_or(|draft| draft.panel_id != panel)
     {
-        // A draft for another piece is committed before this one starts.
-        let panel_id = panel.id.clone();
-        let placement = panel.placement.clone();
         commit_placement_draft(state);
+        let Some(p) = state.project.template.panels.iter().find(|p| p.id == panel) else {
+            return;
+        };
         state.placement_draft = Some(PlacementDraft {
-            panel_id,
-            placement,
+            panel_id: p.id.clone(),
+            placement: p.placement.clone(),
         });
     }
     if let Some(draft) = state.placement_draft.as_mut() {
@@ -119,8 +118,15 @@ pub fn set_placement_draft(state: &mut CssRunnerState, axis: PlacementAxis, valu
     }
 }
 
+/// Discard the pending draft without touching the document or history.
+pub fn cancel_placement_draft(state: &mut CssRunnerState) -> bool {
+    state.placement_draft.take().is_some()
+}
+
 /// Commit the pending draft as one `Command::Place`. An unchanged draft, or one
 /// for a piece that no longer exists, is dropped without touching history.
+/// The current selection is kept: the commit may be processed after the user
+/// has already selected another piece.
 pub fn commit_placement_draft(state: &mut CssRunnerState) -> bool {
     let Some(PlacementDraft {
         panel_id,
@@ -148,18 +154,22 @@ pub fn commit_placement_draft(state: &mut CssRunnerState) -> bool {
         "Placed {name} at {:.1}/{:.1}/{:.1} cm, {:.0}°/{:.0}°/{:.0}°",
         t.x, t.y, t.z, r.x, r.y, r.z
     );
-    commit_authoring_command(
+    // Place does not add, remove or reorder pieces, so the index stays valid.
+    let selected = state.selected_piece_index;
+    let committed = commit_authoring_command(
         state,
         Command::Place {
             panel: panel_id,
             placement,
         },
         message,
-    )
+    );
+    state.selected_piece_index = selected;
+    committed
 }
 
 /// Commit the draft once editing has ended: no number drag in progress and no
-/// numeric text field focused. Called once per displayed frame.
+/// numeric text field focused. Runs after each frame's queued actions.
 pub fn commit_finished_placement_draft(state: &mut CssRunnerState) -> bool {
     if state.placement_draft.is_none()
         || state.numeric_input_active.load(Ordering::Relaxed)

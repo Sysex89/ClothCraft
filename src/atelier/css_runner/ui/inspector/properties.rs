@@ -10,8 +10,36 @@ use super::super::super::state::CssRunnerState;
 use super::super::number::{NumberField, number_field};
 use clothcraft::authoring::CornerRule;
 use clothcraft::css_ui::icons::{icon_chevron_down, icon_chevron_right};
+use clothcraft::garment::GarmentTemplate;
 use cssimpler::core::Node;
 use cssimpler::ui;
+
+/// Label/value rows for the Fabric Mechanics accordion, read from the
+/// selected panel's fabric in the document (SI values, with g/m² and mm shown
+/// for readability). Returns a single explanatory row instead of defaults when
+/// no panel is selected or the panel names a fabric the template lacks.
+pub(in super::super::super) fn fabric_mechanics_rows(
+    template: &GarmentTemplate,
+    selected_panel: usize,
+) -> Vec<(&'static str, String)> {
+    let Some(panel) = template.panels.get(selected_panel) else {
+        return vec![("Fabric", "No panel selected".to_string())];
+    };
+    let Some(fabric) = template.fabrics.iter().find(|f| f.id == panel.fabric) else {
+        return vec![("Fabric", format!("Unknown fabric id '{}'", panel.fabric))];
+    };
+    let p = &fabric.properties;
+    vec![
+        ("Fabric", format!("{} ({})", fabric.name, fabric.id)),
+        ("Areal Density", format!("{:.0} g/m²", p.density * 1e3)),
+        ("Thickness", format!("{:.2} mm", p.thickness * 1e3)),
+        ("Warp Membrane", format!("{:.0} N/m", p.warp)),
+        ("Weft Membrane", format!("{:.0} N/m", p.weft)),
+        ("Shear", format!("{:.0} N/m", p.shear)),
+        ("Bending Warp", format!("{:.2e} N·m", p.bend_warp)),
+        ("Bending Weft", format!("{:.2e} N·m", p.bend_weft)),
+    ]
+}
 
 pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunnerState) -> Node {
     let panels = &state.project.template.panels;
@@ -416,26 +444,15 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
             {if open_4 {
                 ui! {
                     <div class="accordion-content">
-                        <div class="prop-row">
-                            <span class="prop-label">"Preset"</span>
-                            <span class="prop-value">{selected_panel.map_or("Cotton", |p| p.fabric.as_str())}</span>
-                        </div>
-                        <div class="prop-row">
-                            <span class="prop-label">"Areal Density"</span>
-                            <span class="prop-value">"180 g/m²"</span>
-                        </div>
-                        <div class="prop-row">
-                            <span class="prop-label">"Warp Stretch"</span>
-                            <span class="prop-value">"150 N/m"</span>
-                        </div>
-                        <div class="prop-row">
-                            <span class="prop-label">"Weft Stretch"</span>
-                            <span class="prop-value">"120 N/m"</span>
-                        </div>
-                        <div class="prop-row">
-                            <span class="prop-label">"Bending Stiffness"</span>
-                            <span class="prop-value">"0.002 N·m"</span>
-                        </div>
+                        {fabric_mechanics_rows(&state.project.template, state.selected_piece_index)
+                            .into_iter()
+                            .map(|(label, value)| ui! {
+                                <div class="prop-row">
+                                    <span class="prop-label">{label}</span>
+                                    <span class="prop-value">{value}</span>
+                                </div>
+                            })
+                            .collect::<Vec<_>>()}
                     </div>
                 }
             } else {

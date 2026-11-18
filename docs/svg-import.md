@@ -1,7 +1,7 @@
 # SVG pattern geometry import
 
 `garment::svg_import` provides a CPU reader and a prepared authoring edit.
-The desktop adapter exposes this through **File → Import SVG patterns…**.
+The fitting editor exposes this through **Assets & Pieces → Import → SVG**.
 It is not an SVG renderer or a sewing-pattern interchange standard.
 
 ## Native review workflow
@@ -36,7 +36,7 @@ one-step undo/redo, portable save/reopen, invalid source/input budgets, Escape,
 failed compilation rollback and the unsaved-window-close flag. Run them with:
 
 ```powershell
-cargo test --locked --features desktop -j 2 --bin cloth-fit svg_import_ui -- --test-threads=2
+cargo test --locked -j 2 --lib atelier::css_runner::tests::imports -- --test-threads=2
 ```
 
 ### Native Windows evidence — 27 October 2026
@@ -200,5 +200,5 @@ Consulted specifications:
 - [SVG coordinate systems and transforms](https://www.w3.org/TR/SVG2/coords.html)
 - [SVG elliptical arc implementation notes](https://www.w3.org/TR/SVG/implnote.html)
 
-The native adapter lives in `atelier/svg_import_ui.rs` and
-`atelier/documents_ui.rs`; it reuses this reader rather than parsing SVG again.
+The native adapter lives in `src/atelier/css_runner/ui/import_dialog.rs` and
+`src/atelier/css_runner/imports.rs`; it reuses this reader rather than parsing SVG again.

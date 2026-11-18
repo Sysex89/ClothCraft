@@ -10,6 +10,7 @@ use super::super::board::selection::{compute_connected_2d_highlight, effective_s
 use super::super::state::CssRunnerState;
 use super::number::{NumberField, number_field};
 use clothcraft::authoring::CornerRule;
+use clothcraft::usd_scene::ShadingMode;
 use cssimpler::core::Node;
 use cssimpler::ui;
 
@@ -24,12 +25,28 @@ pub(in super::super) fn build_runner_stage(state: &CssRunnerState) -> Node {
     }
 }
 
-pub(in super::super) fn build_runner_3d_viewport(_state: &CssRunnerState) -> Node {
+pub(in super::super) fn build_runner_3d_viewport(state: &CssRunnerState) -> Node {
+    let smooth_class = if state.shading == ShadingMode::Smooth {
+        "viewport-tool-btn active"
+    } else {
+        "viewport-tool-btn"
+    };
+    let flat_class = if state.shading == ShadingMode::Flat {
+        "viewport-tool-btn active"
+    } else {
+        "viewport-tool-btn"
+    };
     ui! {
         <div id="viewport-3d" class="viewport-container">
             <div class="viewport-header">
-                <span class="viewport-title">"3D Garment & Avatar"</span>
-                <span class="viewport-sub">"USD native 3D viewport (VBD + OGC)"</span>
+                <div class="viewport-header-left">
+                    <span class="viewport-title">"3D Garment & Avatar"</span>
+                    <span class="viewport-sub">"USD native 3D viewport (VBD + OGC)"</span>
+                </div>
+                <div class="viewport-tools">
+                    <button id="shading-smooth" class={smooth_class} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetShadingMode(ShadingMode::Smooth))} title="Smooth per-vertex shading">"Smooth"</button>
+                    <button id="shading-flat" class={flat_class} onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::SetShadingMode(ShadingMode::Flat))} title="Flat per-face shading">"Flat"</button>
+                </div>
             </div>
             <div class="canvas-area">
                 <div id="runner-viewport-3d-scene" class="viewport"></div>

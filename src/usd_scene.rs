@@ -7,6 +7,141 @@
 use crate::{garment::CompiledGarment, model::State};
 use std::{collections::BTreeSet, fmt::Write as _};
 
+/// How the viewport derives shading normals from the displayed triangle mesh.
+///
+/// Both modes publish explicit USD normals instead of leaving the renderer to
+/// invent per-face normals. [`ShadingMode::Smooth`] authors one area-weighted
+/// normal per point with `vertex` interpolation, so the surface shades
+/// continuously across triangle edges. [`ShadingMode::Flat`] authors one normal
+/// per triangle corner with `faceVarying` interpolation, so every face keeps a
+/// constant normal.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ShadingMode {
+    #[default]
+    Smooth,
+    Flat,
+}
+
+impl ShadingMode {
+    /// USD `normals` interpolation token used by this mode.
+    pub fn interpolation(self) -> &'static str {
+        match self {
+            Self::Smooth => "vertex",
+            Self::Flat => "faceVarying",
+        }
+    }
+
+    /// Short label for the viewport control.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Smooth => "Smooth",
+            Self::Flat => "Flat",
+        }
+    }
+}
+
+/// Normalized face normal for one triangle, or `+Y` when it is degenerate.
+fn face_normal(points: &[glam::DVec3], triangle: [usize; 3]) -> glam::DVec3 {
+    let (Some(a), Some(b), Some(c)) = (
+        points.get(triangle[0]),
+        points.get(triangle[1]),
+        points.get(triangle[2]),
+    ) else {
+        return glam::DVec3::Y;
+    };
+    let normal = (*b - *a).cross(*c - *a);
+    if normal.is_finite() && normal.length_squared() > 0.0 {
+        normal.normalize()
+    } else {
+        glam::DVec3::Y
+    }
+}
+
+/// Area-weighted per-vertex normals for a triangle mesh.
+///
+/// Triangle winding defines orientation, matching the renderer's own face
+/// normal. Degenerate triangles contribute nothing. A point with no
+/// nondegenerate incident triangle, or with non-finite coordinates, receives a
+/// finite upward fallback because the viewport rejects zero-length normals.
+pub fn smooth_vertex_normals(points: &[glam::DVec3], triangles: &[[usize; 3]]) -> Vec<glam::DVec3> {
+    let mut normals = vec![glam::DVec3::ZERO; points.len()];
+    for &triangle in triangles {
+        let (Some(a), Some(b), Some(c)) = (
+            points.get(triangle[0]),
+            points.get(triangle[1]),
+            points.get(triangle[2]),
+        ) else {
+            continue;
+        };
+        let normal = (*b - *a).cross(*c - *a);
+        if !normal.is_finite() {
+            continue;
+        }
+        for index in triangle {
+            normals[index] += normal;
+        }
+    }
+    for normal in &mut normals {
+        *normal = if normal.is_finite() && normal.length_squared() > 0.0 {
+            normal.normalize()
+        } else {
+            glam::DVec3::Y
+        };
+    }
+    normals
+}
+
+/// One flat normal per triangle corner, in `faceVertexIndices` order.
+pub fn flat_corner_normals(points: &[glam::DVec3], triangles: &[[usize; 3]]) -> Vec<glam::DVec3> {
+    let mut normals = Vec::with_capacity(triangles.len() * 3);
+    for &triangle in triangles {
+        let normal = face_normal(points, triangle);
+        normals.extend([normal; 3]);
+    }
+    normals
+}
+
+/// Display normals for a mesh under `mode`, in the matching USD value order.
+pub fn display_normals(
+    points: &[glam::DVec3],
+    triangles: &[[usize; 3]],
+    mode: ShadingMode,
+) -> Vec<glam::DVec3> {
+    match mode {
+        ShadingMode::Smooth => smooth_vertex_normals(points, triangles),
+        ShadingMode::Flat => flat_corner_normals(points, triangles),
+    }
+}
+
+/// Append an authored `normal3f[] normals` attribute at `indent`.
+fn push_normals(
+    out: &mut String,
+    indent: &str,
+    points: &[glam::DVec3],
+    triangles: &[[usize; 3]],
+    mode: ShadingMode,
+) {
+    let normals = display_normals(points, triangles, mode);
+    write!(out, "\n{indent}normal3f[] normals = [").unwrap();
+    for (j, normal) in normals.iter().enumerate() {
+        if j > 0 {
+            out.push_str(", ");
+        }
+        write!(
+            out,
+            "({}, {}, {})",
+            normal.x as f32, normal.y as f32, normal.z as f32
+        )
+        .unwrap();
+    }
+    write!(
+        out,
+        "] (\n{indent}    interpolation = \"{}\"\n{indent})",
+        mode.interpolation()
+    )
+    .unwrap();
+}
+
 fn quoted(value: &str) -> Result<String, String> {
     let mut out = String::from("\"");
     for c in value.chars() {
@@ -152,14 +287,26 @@ pub fn garment_stage_usda(garment: &CompiledGarment, state: &State) -> Result<St
             out.push('3');
         }
         out.push_str("]\n            int[] faceVertexIndices = [");
-        for (j, tri) in mesh.triangles[panel.triangles.clone()].iter().enumerate() {
+        let local_triangles: Vec<[usize; 3]> = mesh.triangles[panel.triangles.clone()]
+            .iter()
+            .map(|tri| tri.vertices.map(|v| v - panel.vertices.start))
+            .collect();
+        for (j, triangle) in local_triangles.iter().enumerate() {
             if j > 0 {
                 out.push_str(", ");
             }
-            let [a, b, c] = tri.vertices.map(|v| v - panel.vertices.start);
+            let [a, b, c] = *triangle;
             write!(out, "{a}, {b}, {c}").unwrap();
         }
-        out.push_str("]\n            custom double2[] clothcraft:restUV = [");
+        out.push(']');
+        push_normals(
+            &mut out,
+            "            ",
+            &state.x[panel.vertices.clone()],
+            &local_triangles,
+            ShadingMode::Smooth,
+        );
+        out.push_str("\n            custom double2[] clothcraft:restUV = [");
         for (j, uv) in mesh.uv[panel.vertices.clone()].iter().enumerate() {
             if j > 0 {
                 out.push_str(", ");
@@ -226,14 +373,23 @@ pub fn mesh_stage_usda(
         out.push('3');
     }
     out.push_str("]\n            int[] faceVertexIndices = [");
-    for (j, tri) in mesh.triangles.iter().enumerate() {
+    let triangles: Vec<[usize; 3]> = mesh.triangles.iter().map(|tri| tri.vertices).collect();
+    for (j, triangle) in triangles.iter().enumerate() {
         if j > 0 {
             out.push_str(", ");
         }
-        let [a, b, c] = tri.vertices;
+        let [a, b, c] = *triangle;
         write!(out, "{a}, {b}, {c}").unwrap();
     }
-    out.push_str("]\n            custom double2[] clothcraft:restUV = [");
+    out.push(']');
+    push_normals(
+        &mut out,
+        "            ",
+        &state.x,
+        &triangles,
+        ShadingMode::Smooth,
+    );
+    out.push_str("\n            custom double2[] clothcraft:restUV = [");
     for (j, uv) in mesh.uv.iter().enumerate() {
         if j > 0 {
             out.push_str(", ");
@@ -284,6 +440,170 @@ pub fn viewport_panel_path(id: &str) -> String {
     format!("/World/Garment/{}", prim_name(id))
 }
 
+/// Author display normals for `path` under `mode`.
+///
+/// Values and interpolation metadata are rewritten together, so a toggle from
+/// `vertex` to `faceVarying` (or back) stays consistent before the next render.
+#[cfg(feature = "desktop")]
+fn set_viewport_normals(
+    scene: &cssimpler::renderer::gpu::usd::UsdScene,
+    path: &str,
+    points: &[glam::DVec3],
+    triangles: &[[usize; 3]],
+    mode: ShadingMode,
+) -> Result<(), String> {
+    use cssimpler::renderer::gpu::openusd::{gf, tf};
+    use cssimpler::renderer::gpu::openusd_schemas::geom::AttributeMetadata;
+    let values: Vec<_> = display_normals(points, triangles, mode)
+        .iter()
+        .map(|n| gf::vec3f(n.x as f32, n.y as f32, n.z as f32))
+        .collect();
+    let attribute = scene
+        .stage()
+        .attribute(format!("{path}.normals"))
+        .map_err(|e| e.to_string())?;
+    attribute
+        .clone()
+        .set_interpolation(tf::Token::new(mode.interpolation()))
+        .map_err(|e| e.to_string())?;
+    attribute.set(values).map(|_| ()).map_err(|e| e.to_string())
+}
+
+/// Recompute one mesh's shading normals after its positions changed.
+#[cfg(feature = "desktop")]
+pub fn update_viewport_normals(
+    scene: &cssimpler::renderer::gpu::usd::UsdScene,
+    path: &str,
+    points: &[glam::DVec3],
+    triangles: &[[usize; 3]],
+    mode: ShadingMode,
+) -> Result<(), String> {
+    set_viewport_normals(scene, path, points, triangles, mode)
+}
+
+/// Recompute the static collision display mesh's shading normals.
+#[cfg(feature = "desktop")]
+pub fn update_viewport_surface_shading(
+    scene: &cssimpler::renderer::gpu::usd::UsdScene,
+    surface: &crate::avatar::SurfaceMesh,
+    mode: ShadingMode,
+) -> Result<(), String> {
+    set_viewport_normals(
+        scene,
+        "/Collider",
+        &surface.vertices,
+        &surface.triangles,
+        mode,
+    )
+}
+
+/// Replace the collision display mesh topology, positions and shading normals.
+///
+/// Used after a static avatar import. Physics uses the same `SurfaceMesh`; this
+/// only updates the transient USD display stage. The caller owns the avatar
+/// candidate lifetime.
+#[cfg(feature = "desktop")]
+pub fn update_viewport_surface(
+    scene: &cssimpler::renderer::gpu::usd::UsdScene,
+    surface: &crate::avatar::SurfaceMesh,
+    mode: ShadingMode,
+) -> Result<(), String> {
+    if surface
+        .vertices
+        .iter()
+        .any(|p| p.to_array().into_iter().any(|v| !finite_float(v)))
+    {
+        return Err("USD collider positions must be finite f32 values".into());
+    }
+    if surface.triangles.is_empty() {
+        return Err("USD collider requires at least one triangle".into());
+    }
+    let counts = vec![3_i32; surface.triangles.len()];
+    let indices: Vec<i32> = surface
+        .triangles
+        .iter()
+        .flat_map(|t| t.map(|i| i as i32))
+        .collect();
+    let stage = scene.stage();
+    update_viewport_points(scene, "/Collider", &surface.vertices)?;
+    stage
+        .attribute("/Collider.faceVertexCounts")
+        .map_err(|e| e.to_string())?
+        .set(counts)
+        .map_err(|e| e.to_string())?;
+    stage
+        .attribute("/Collider.faceVertexIndices")
+        .map_err(|e| e.to_string())?
+        .set(indices)
+        .map_err(|e| e.to_string())?;
+    set_viewport_normals(
+        scene,
+        "/Collider",
+        &surface.vertices,
+        &surface.triangles,
+        mode,
+    )
+}
+
+/// Publish one panel's transient positions and shading normals.
+#[cfg(feature = "desktop")]
+fn set_panel_positions_and_normals(
+    scene: &cssimpler::renderer::gpu::usd::UsdScene,
+    garment: &CompiledGarment,
+    state: &State,
+    panel: &crate::garment::template::PanelRange,
+    mode: ShadingMode,
+) -> Result<(), String> {
+    let path = viewport_panel_path(&panel.id);
+    let points = &state.x[panel.vertices.clone()];
+    update_viewport_points(scene, &path, points)?;
+    let local_triangles: Vec<[usize; 3]> = garment.mesh.triangles[panel.triangles.clone()]
+        .iter()
+        .map(|tri| tri.vertices.map(|v| v - panel.vertices.start))
+        .collect();
+    set_viewport_normals(scene, &path, points, &local_triangles, mode)
+}
+
+/// Refresh every panel's display positions and normals on the event thread.
+#[cfg(feature = "desktop")]
+pub fn update_panel_viewport_positions(
+    scene: &cssimpler::renderer::gpu::usd::UsdScene,
+    garment: &CompiledGarment,
+    state: &State,
+    mode: ShadingMode,
+) -> Result<(), String> {
+    if state.x.len() != garment.mesh.uv.len() {
+        return Err("USD mesh sync requires matching state and UV vertex counts".into());
+    }
+    if state
+        .x
+        .iter()
+        .any(|p| p.to_array().into_iter().any(|v| !finite_float(v)))
+    {
+        return Err("USD display positions must be finite f32 values".into());
+    }
+    for panel in &garment.panels {
+        set_panel_positions_and_normals(scene, garment, state, panel, mode)?;
+    }
+    Ok(())
+}
+
+/// Apply a shading mode to every displayed mesh without moving any geometry.
+#[cfg(feature = "desktop")]
+pub fn apply_viewport_shading(
+    scene: &cssimpler::renderer::gpu::usd::UsdScene,
+    garment: &CompiledGarment,
+    state: &State,
+    surface: Option<&crate::avatar::SurfaceMesh>,
+    mode: ShadingMode,
+) -> Result<(), String> {
+    update_panel_viewport_positions(scene, garment, state, mode)?;
+    if let Some(surface) = surface {
+        update_viewport_surface_shading(scene, surface, mode)?;
+    }
+    Ok(())
+}
+
 #[cfg(feature = "desktop")]
 pub fn update_viewport_topology(
     scene: &cssimpler::renderer::gpu::usd::UsdScene,
@@ -309,12 +629,13 @@ pub fn update_viewport_topology(
     Ok(())
 }
 
-/// Update per-panel USD mesh topology, vertex positions, and UVs after authoring edits.
+/// Update per-panel USD mesh topology, vertex positions, normals, and UVs after authoring edits.
 #[cfg(feature = "desktop")]
 pub fn update_panel_viewport_mesh(
     scene: &cssimpler::renderer::gpu::usd::UsdScene,
     garment: &CompiledGarment,
     state: &State,
+    mode: ShadingMode,
 ) -> Result<(), String> {
     use cssimpler::renderer::gpu::openusd::gf;
     if state.x.len() != garment.mesh.uv.len() {
@@ -335,10 +656,6 @@ pub fn update_panel_viewport_mesh(
     let stage = scene.stage();
     for panel in &garment.panels {
         let path = viewport_panel_path(&panel.id);
-        let points: Vec<_> = state.x[panel.vertices.clone()]
-            .iter()
-            .map(|p| gf::vec3f(p.x as f32, p.y as f32, p.z as f32))
-            .collect();
         let counts = vec![3_i32; panel.triangles.len()];
         let indices: Vec<i32> = garment.mesh.triangles[panel.triangles.clone()]
             .iter()
@@ -348,11 +665,6 @@ pub fn update_panel_viewport_mesh(
             .iter()
             .map(|uv| gf::vec2f(uv.x as f32, uv.y as f32))
             .collect();
-        stage
-            .attribute(format!("{path}.points"))
-            .map_err(|e| e.to_string())?
-            .set(points)
-            .map_err(|e| e.to_string())?;
         stage
             .attribute(format!("{path}.faceVertexCounts"))
             .map_err(|e| e.to_string())?
@@ -368,6 +680,7 @@ pub fn update_panel_viewport_mesh(
             .map_err(|e| e.to_string())?
             .set(uvs)
             .map_err(|e| e.to_string())?;
+        set_panel_positions_and_normals(scene, garment, state, panel, mode)?;
     }
     Ok(())
 }
@@ -396,7 +709,15 @@ pub fn append_viewport_surface(mut usda: String, surface: &crate::avatar::Surfac
         }
         write!(usda, "{},{},{}", t[0], t[1], t[2]).unwrap();
     }
-    usda.push_str("]\n}\n");
+    usda.push(']');
+    push_normals(
+        &mut usda,
+        " ",
+        &surface.vertices,
+        &surface.triangles,
+        ShadingMode::Smooth,
+    );
+    usda.push_str("\n}\n");
     usda
 }
 

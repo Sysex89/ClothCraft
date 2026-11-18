@@ -661,3 +661,117 @@ fn test_all_runner_buttons_click_and_layout_bounds() {
         assert_eq!(app.state().layout_mode, expected_mode);
     }
 }
+
+#[test]
+fn viewport_shading_toggle_rewrites_usd_normals() {
+    use cssimpler::renderer::gpu::openusd::gf;
+    use cssimpler::renderer::gpu::openusd_schemas::geom::AttributeMetadata;
+
+    let _guard = worker::WORKER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let stylesheet = load_studio_stylesheet().expect("load studio stylesheet");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let avatar = dir.path().join("avatar.obj");
+    std::fs::write(&avatar, "v 0 0 -10\nv 1 0 -10\nv 0 1 -10\nf 1 2 3\n").expect("write avatar");
+    let project = FittingProject::basic(GarmentKind::Tshirt, 1, avatar);
+    let scene = project.compile().expect("compile scene");
+    let files = DocumentFiles {
+        output: dir.path().join("shading_out"),
+        source: None,
+        modified: false,
+    };
+    let (tx, latest) = worker::start_cpu().expect("start cpu worker");
+    let state = CssRunnerState::new(project, scene, files, tx, latest);
+    let mut app = create_runner_app(state, &stylesheet);
+    app.set_viewport(cssimpler::renderer::ViewportSize::new(1600, 980));
+    app.frame(FrameInfo {
+        delta: Duration::ZERO,
+        frame_index: 0,
+    });
+
+    let panel_path =
+        clothcraft::usd_scene::viewport_panel_path(&app.state().scene.garment.panels[0].id);
+    let read = |state: &CssRunnerState| {
+        let attribute = state
+            .usd_scene
+            .as_ref()
+            .unwrap()
+            .stage()
+            .attribute(format!("{panel_path}.normals"))
+            .unwrap();
+        let interpolation = attribute.interpolation().unwrap().unwrap();
+        let values = attribute.get::<Vec<gf::Vec3f>>().unwrap().unwrap();
+        (interpolation, values)
+    };
+
+    assert_eq!(
+        app.state().shading,
+        clothcraft::usd_scene::ShadingMode::Smooth
+    );
+    let (interpolation, smooth) = read(app.state());
+    assert_eq!(interpolation.as_str(), "vertex");
+    assert_eq!(
+        smooth.len(),
+        app.state().scene.garment.panels[0].vertices.len()
+    );
+
+    let flat_button = app.find_element_bounds_by_id("#shading-flat").unwrap();
+    assert!(cssimpler::renderer::dispatch_click(
+        app.scene(),
+        flat_button.x + flat_button.width * 0.5,
+        flat_button.y + flat_button.height * 0.5
+    ));
+    app.frame(FrameInfo {
+        delta: Duration::from_millis(16),
+        frame_index: 1,
+    });
+    assert_eq!(
+        app.state().shading,
+        clothcraft::usd_scene::ShadingMode::Flat
+    );
+    let (interpolation, flat) = read(app.state());
+    assert_eq!(interpolation.as_str(), "faceVarying");
+    assert_eq!(
+        flat.len(),
+        app.state().scene.garment.panels[0].triangles.len() * 3
+    );
+    assert!(
+        flat.as_chunks::<3>()
+            .0
+            .iter()
+            .all(|corner| corner[0] == corner[1] && corner[1] == corner[2])
+    );
+
+    let smooth_button = app.find_element_bounds_by_id("#shading-smooth").unwrap();
+    assert!(cssimpler::renderer::dispatch_click(
+        app.scene(),
+        smooth_button.x + smooth_button.width * 0.5,
+        smooth_button.y + smooth_button.height * 0.5
+    ));
+    app.frame(FrameInfo {
+        delta: Duration::from_millis(16),
+        frame_index: 2,
+    });
+    assert_eq!(
+        app.state().shading,
+        clothcraft::usd_scene::ShadingMode::Smooth
+    );
+    let (interpolation, roundtrip) = read(app.state());
+    assert_eq!(interpolation.as_str(), "vertex");
+    assert_eq!(roundtrip, smooth);
+
+    // A moved vertex must refresh the authored normals, not leave launch-time values.
+    let panel = &app.state().scene.garment.panels[0];
+    let vertex = app.state().scene.garment.mesh.triangles[panel.triangles.start].vertices[0];
+    let direction = smooth[0];
+    app.state_mut().scene.state.x[vertex] += glam::DVec3::new(
+        f64::from(direction.x),
+        f64::from(direction.y),
+        f64::from(direction.z),
+    ) * 0.05;
+    app.state_mut().sync_usd_points();
+    let (interpolation, moved) = read(app.state());
+    assert_eq!(interpolation.as_str(), "vertex");
+    assert_ne!(moved, smooth);
+}

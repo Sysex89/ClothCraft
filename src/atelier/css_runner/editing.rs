@@ -15,7 +15,7 @@ use clothcraft::authoring::{self, Command};
 use clothcraft::fitting::FittingScene;
 use clothcraft::garment::GarmentTemplate;
 use clothcraft::garment::meshing::MeshingSettings;
-use clothcraft::garment::seam::{BoundaryRef, Side};
+use clothcraft::garment::seam::{BoundaryCurve, BoundaryRef, Side};
 use glam::DVec2;
 use std::sync::Arc;
 
@@ -94,6 +94,7 @@ pub(super) fn install_authoring_edit(
                 usd,
                 &state.scene.garment,
                 &state.scene.state,
+                state.shading,
             );
         }
         state.send_control_state(false);
@@ -408,8 +409,18 @@ pub(super) fn finish_internal_line_draft(state: &mut CssRunnerState) -> bool {
     true
 }
 
+/// Measure the same compiled material boundary that the seam compiler uses.
+pub(super) fn sew_boundary_length(state: &CssRunnerState, panel: &str, edge: &str) -> Option<f64> {
+    let garment = &state.scene.garment;
+    let range = garment.panels.iter().find(|p| p.id == panel)?;
+    let vertices = range.boundaries.get(edge)?.clone();
+    BoundaryCurve::new(&garment.mesh, vertices, [0.0, 1.0], false)
+        .ok()
+        .map(|curve| curve.length)
+}
+
 /// Same relative tolerance the seam compiler uses before it demands `allow_ease`
-/// (`garment::seam`), so the UI never offers an un-eased seam the compiler rejects.
+/// (`garment::seam`).
 pub fn sew_lengths_equal(a_len_m: f64, b_len_m: f64) -> bool {
     (a_len_m - b_len_m).abs() <= 1e-8 * a_len_m.max(b_len_m)
 }

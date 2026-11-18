@@ -9,7 +9,11 @@ use cssimpler::renderer::EngineEvent;
 pub(in super::super) fn handle_scroll(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
     match event {
         EngineEvent::Scroll { delta, .. } => {
-            if state.settings_open || state.command_palette_open || state.solver_menu_open {
+            if state.settings_open
+                || state.command_palette_open
+                || state.solver_menu_open
+                || state.import_dialog.is_some()
+            {
                 return false;
             }
             let dy = match delta {

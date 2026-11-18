@@ -13,6 +13,9 @@ pub enum NumberField {
     CornerRadius,
     CornerTension,
     Placement(PlacementAxis),
+    ImportTolerance,
+    ImportMesh,
+    ImportScale,
 }
 
 pub(in super::super) fn number_field(state: &CssRunnerState, id: &str, field: NumberField) -> Node {
@@ -21,6 +24,9 @@ pub(in super::super) fn number_field(state: &CssRunnerState, id: &str, field: Nu
         NumberField::CornerRadius => state.corner_radius_mm,
         NumberField::CornerTension => state.corner_tension,
         NumberField::Placement(axis) => placement_value(state, axis),
+        NumberField::ImportTolerance => state.import_tolerance_mm,
+        NumberField::ImportMesh => state.import_mesh_mm,
+        NumberField::ImportScale => state.import_scale_mm_per_unit,
     };
     let (_, _, _, title) = field.spec();
     let drag = state.number_drag.clone();
@@ -87,6 +93,14 @@ impl NumberField {
                 (-180.0, 180.0, 1.0, "Piece rotation (degrees)")
             }
             Self::Placement(_) => (-300.0, 300.0, 0.5, "Piece position (cm)"),
+            Self::ImportTolerance => (0.01, 5.0, 0.01, "Import curve chord error (mm)"),
+            Self::ImportMesh => (3.0, 500.0, 1.0, "Imported panel mesh spacing (mm)"),
+            Self::ImportScale => (
+                0.0,
+                1000.0,
+                1.0,
+                "DXF millimetres per unit (0 = file units)",
+            ),
         }
     }
 }

@@ -2,6 +2,7 @@
 
 pub(super) mod asset_browser;
 pub(super) mod command_palette;
+pub(super) mod import_dialog;
 pub(super) mod inspector;
 pub(super) mod settings;
 pub(super) mod shell;

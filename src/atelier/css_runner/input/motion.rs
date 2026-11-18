@@ -19,7 +19,7 @@ pub(in super::super) fn handle_motion(state: &mut CssRunnerState, event: &Engine
             let dx = px - state.last_pointer_pos.0;
             let dy = py - state.last_pointer_pos.1;
             state.last_pointer_pos = (px, py);
-            if state.settings_open {
+            if state.settings_open || state.import_dialog.is_some() {
                 return false;
             }
             if state

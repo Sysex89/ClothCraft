@@ -14,6 +14,7 @@ and `native_board::*`.
 | State | `state.rs` | Shared editor state, selection helpers and simulation control methods |
 | Actions | `actions.rs` | Action flags, queued UI operations and the frame update loop |
 | Documents | `documents.rs` | Save and export methods |
+| Imports | `imports.rs`, `ui/import_dialog.rs` | Reviewed DXF/SVG/avatar parsing, preview, confirmation and transactional installation |
 | Editing | `editing.rs` | Authoring transactions, history, curve/corner edits and draft commits |
 | Board coordinates | `board/geometry.rs`, `board/types.rs` | Layout bounds, coordinate conversion, geometry helpers and transient types |
 | Board selection | `board/hit_testing.rs`, `board/selection.rs` | Picking, linked/sewn selection and selection cleanup |
@@ -23,7 +24,7 @@ and `native_board::*`.
 | Shell | `ui/shell.rs`, `ui/viewports.rs` | Workspace composition, viewport hosts and responsive CAD toolbar |
 | Chrome | `ui/top_bar.rs`, `ui/tool_rails.rs`, `ui/status_bar.rs`, `ui/command_palette.rs`, `ui/settings.rs` | Transport, tools, status, commands and session settings |
 | Browsers | `ui/asset_browser.rs`, `ui/inspector/` | Assets/piece cards, category tabs and property accordions |
-| Regression tests | `tests/board.rs`, `tests/shell.rs`, `tests/simulation.rs`, `tests/support.rs` | Existing board/editing, shell/handler and camera regressions with shared fixtures |
+| Regression tests | `tests/{board,shell,simulation,imports}.rs`, `tests/support.rs` | Existing board/editing, shell/handler, camera and import regressions with shared fixtures |
 
 Each implementation file imports its dependencies explicitly. Private helper
 visibility is restricted to the runner; the facade preserves the original

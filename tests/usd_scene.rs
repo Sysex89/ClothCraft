@@ -1,5 +1,15 @@
-use clothcraft::{garment::GarmentTemplate, usd_scene::garment_stage_usda};
+use clothcraft::{
+    garment::GarmentTemplate,
+    usd_scene::{
+        ShadingMode, append_viewport_surface, display_normals, flat_corner_normals,
+        garment_stage_usda, smooth_vertex_normals,
+    },
+};
 use glam::DVec3;
+
+fn approx(a: DVec3, b: DVec3) -> bool {
+    (a - b).length() < 1e-12
+}
 
 fn tiny() -> clothcraft::garment::CompiledGarment {
     let mut template = GarmentTemplate::two_panel_demo();
@@ -126,4 +136,82 @@ fn mesh_stage_usda_publishes_model_mesh() {
     assert!(usda.contains("point3f[] points = ["));
     assert!(usda.contains("int[] faceVertexCounts = ["));
     assert!(usda.contains("int[] faceVertexIndices = ["));
+    assert!(usda.contains("normal3f[] normals = ["));
+}
+
+#[test]
+fn smooth_normals_average_incident_faces_and_flat_normals_stay_per_face() {
+    // Two triangles share edge 0-1 and fold by 90 degrees: one faces +Z, one +Y.
+    let points = [DVec3::ZERO, DVec3::X, DVec3::Y, DVec3::Z];
+    let triangles = [[0, 1, 2], [0, 3, 1]];
+    let smooth = smooth_vertex_normals(&points, &triangles);
+    let shared = DVec3::new(0.0, 1.0, 1.0).normalize();
+    assert!(approx(smooth[0], shared), "{:?}", smooth[0]);
+    assert!(approx(smooth[1], shared), "{:?}", smooth[1]);
+    assert!(approx(smooth[2], DVec3::Z), "{:?}", smooth[2]);
+    assert!(approx(smooth[3], DVec3::Y), "{:?}", smooth[3]);
+
+    let flat = flat_corner_normals(&points, &triangles);
+    assert_eq!(flat.len(), 6);
+    assert!(flat[0..3].iter().all(|n| approx(*n, DVec3::Z)));
+    assert!(flat[3..6].iter().all(|n| approx(*n, DVec3::Y)));
+
+    assert_eq!(
+        display_normals(&points, &triangles, ShadingMode::Smooth),
+        smooth
+    );
+    assert_eq!(
+        display_normals(&points, &triangles, ShadingMode::Flat),
+        flat
+    );
+}
+
+#[test]
+fn degenerate_triangles_and_out_of_range_indices_get_finite_fallback_normals() {
+    let points = [DVec3::ZERO; 3];
+    for normals in [
+        smooth_vertex_normals(&points, &[[0, 1, 2]]),
+        flat_corner_normals(&points, &[[0, 1, 2]]),
+        smooth_vertex_normals(&points[..1], &[[0, 1, 2]]),
+    ] {
+        assert!(!normals.is_empty());
+        assert!(
+            normals
+                .iter()
+                .all(|n| n.is_finite() && approx(*n, DVec3::Y)),
+            "{normals:?}"
+        );
+    }
+}
+
+#[test]
+fn scene_publishes_smooth_vertex_normals_for_every_panel() {
+    let garment = tiny();
+    let text = garment_stage_usda(&garment, &garment.initial_state).unwrap();
+    assert_eq!(text.matches("normal3f[] normals = [").count(), 2);
+    assert_eq!(
+        text.matches("interpolation = \"vertex\"\n            )\n            custom double2[]")
+            .count(),
+        2
+    );
+    // One normals value per panel vertex (a 1x1 panel publishes four points).
+    for line in text
+        .lines()
+        .filter(|line| line.trim_start().starts_with("normal3f[] normals ="))
+    {
+        let values = line.split_once("= [").unwrap().1;
+        let values = values.split_once("] (").unwrap().0;
+        assert_eq!(values.matches('(').count(), 4, "{line}");
+    }
+}
+
+#[test]
+fn collision_display_surface_publishes_smooth_normals() {
+    let surface = clothcraft::avatar::SurfaceMesh {
+        vertices: vec![DVec3::ZERO, DVec3::X, DVec3::Y, DVec3::Z],
+        triangles: vec![[0, 1, 2], [0, 3, 1]],
+    };
+    let usda = append_viewport_surface(String::new(), &surface);
+    assert_eq!(usda.matches("normal3f[] normals = [").count(), 1);
+    assert_eq!(usda.matches("interpolation = \"vertex\"\n )\n").count(), 1);
 }

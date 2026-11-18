@@ -83,8 +83,8 @@ fn rejected_save_leaves_the_previous_document_intact() {
     state.scene.state.x[0].x = f64::NAN;
     state.save_project();
     assert!(
-        state.status_message.starts_with("Save error:")
-            && state.status_message.contains("was not changed"),
+        state.status_message.starts_with("Save error for ")
+            && state.status_message.contains(&source.display().to_string()),
         "{}",
         state.status_message
     );

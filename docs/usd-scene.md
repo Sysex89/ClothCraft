@@ -65,6 +65,7 @@ writes a file; a subsequent I/O error is not an atomic file-replacement guarante
 | `points` | World-space current positions, `point3f[]`, in metres; explicit f64 to f32 conversion |
 | `faceVertexCounts`, `faceVertexIndices` | Triangles and panel-local transient point indices, preserving compiler winding |
 | `subdivisionScheme`, `orientation`, `doubleSided` | Explicit `none`, `rightHanded`, `true`; polygon cloth without implicit Catmull-Clark or invented thickness |
+| `normals` | Area-weighted smooth `normal3f[]` with `vertex` interpolation for every panel and the collision display mesh; the viewport therefore shades continuously instead of falling back to one normal per face. The 3D header's Smooth/Flat control rewrites the same attribute with `faceVarying` per-corner normals for flat shading |
 | `clothcraft:restUV` | Custom `double2[]` in **local material metres**, retained directly from `Mesh.uv`; independent of drape, placement and board layout |
 | `primvars:st` | Standard `texCoord2f[]` with `vertex` interpolation, a f32 presentation copy of the same local metre coordinates; no atlas packing or [0,1] normalization |
 | `primvars:displayColor` | One constant illustrative color, not fabric appearance or a calibrated material |
@@ -138,7 +139,10 @@ cargo test --locked --no-default-features -j 2 --test usd_scene -- --test-thread
 
 They cover panel-local topology/winding, semantic ID stability and escaping,
 unchanged f64 material coordinates after deformation, display precision,
-inconsistent partitions, and invalid snapshots. The optional independent reader
+inconsistent partitions, invalid snapshots, smooth area-weighted averaging,
+flat per-corner normals and the finite fallback for degenerate or isolated
+vertices. The runner regression also clicks the Smooth/Flat control and reads the
+authored interpolation and values back from the live stage. The optional independent reader
 uses Pixar's Python `pxr` API; no GPU or native window is created:
 
 ```powershell
@@ -194,6 +198,21 @@ separate follow-up work.
 
 Native USD host elements have explicit flex sizing and minimum drawable dimensions;
 unlike an SVG, their mesh content does not supply an intrinsic DOM size.
+
+Display normals are authored by ClothCraft rather than inferred by the renderer.
+`garment_stage_usda` and `append_viewport_surface` publish an area-weighted
+`normal3f[] normals` attribute with `vertex` interpolation for every panel and
+the static collision mesh, so the default appearance is smooth. A zero or
+non-finite normal would be rejected by the viewport, so degenerate or isolated
+vertices use a finite `+Y` fallback. Triangle winding, not the rest geometry,
+defines orientation.
+
+Accepted snapshots, edit commits and remeshes rewrite the affected `points` and
+`normals` together on the event thread. The 3D viewport header exposes a
+Smooth/Flat control. Flat mode authors `faceVarying` per-corner normals from the
+same triangles, and switching back republishes the vertex normals. The control
+is view-only state: it is not saved in the document, does not touch physics and
+resets to Smooth on launch.
 
 The native preview also includes a static display mesh for the collision surface:
 the loaded mannequin in the fitting workspace and a tessellated analytic sphere

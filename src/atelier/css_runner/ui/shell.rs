@@ -3,6 +3,7 @@
 use super::super::state::CssRunnerState;
 use super::asset_browser::build_runner_left_browser;
 use super::command_palette::build_runner_command_palette;
+use super::import_dialog::build_runner_import_dialog;
 use super::inspector::build_runner_right_dock;
 use super::settings::build_runner_settings;
 use super::status_bar::build_runner_status_bar;
@@ -29,6 +30,7 @@ pub fn build_runner_ui(state: &CssRunnerState) -> Node {
             {build_runner_status_bar(state)}
             {build_runner_command_palette(state)}
             {build_runner_settings(state)}
+            {build_runner_import_dialog(state)}
         </div>
     }
 }

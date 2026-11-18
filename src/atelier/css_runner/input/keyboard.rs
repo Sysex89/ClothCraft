@@ -23,6 +23,14 @@ pub(in super::super) fn handle_keyboard(state: &mut CssRunnerState, event: &Engi
                     }
                     return false;
                 }
+                if state.import_dialog.is_some() {
+                    if matches!(&k.logical_key, cssimpler::renderer::KeyIdentity::Named(name) if name == "Escape")
+                    {
+                        state.close_import_dialog();
+                        return true;
+                    }
+                    return true;
+                }
                 let ctrl = k.modifiers.control || k.modifiers.super_key;
                 if let cssimpler::renderer::KeyIdentity::Character(ref ch) = k.logical_key {
                     if ch == " " {

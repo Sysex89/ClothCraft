@@ -16,7 +16,7 @@ impl CssRunnerState {
     }
 
     /// Save through `FittingProject::save` (atomic replacement, portable avatar
-    /// asset). A rejected save leaves the previous file untouched.
+    /// asset). Validation happens before the document is replaced.
     pub fn save_project(&mut self) {
         let (path, is_default) = self.save_target();
         if is_default {
@@ -37,9 +37,7 @@ impl CssRunnerState {
                     format!("Saved {}", path.display())
                 };
             }
-            Err(e) => {
-                self.status_message = format!("Save error: {e}; {} was not changed", path.display())
-            }
+            Err(e) => self.status_message = format!("Save error for {}: {e}", path.display()),
         }
     }
 

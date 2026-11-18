@@ -1,6 +1,6 @@
 # Import DXF pattern outlines
 
-Use **File → Import DXF patterns…** and choose a local ASCII DXF. Review the
+Use **Assets & Pieces → Import → DXF** in the fitting editor and choose a local ASCII DXF. Review the
 preview, select closed outlines, choose an existing fabric and mesh spacing,
 acknowledge excluded data, then **Add panels**. The operation adds unsewn pieces
 to the current garment. It does not replace its avatar, materials or seams.
@@ -54,7 +54,9 @@ the import modal and continues the normal unsaved-document flow.
   DXF sections are not imported. No code-page conversion or industrial
   DXF-AAMA/DXF-ASTM semantics are implemented.
 
-The CPU adapter is `src/pattern_import.rs`; native controls live in
-`src/atelier/pattern_import_ui.rs` and use the existing document/history adapter.
-Tests use the CPU named-widget harness. Native OS picker, GPU rendering and
-visual acceptance require a separate window run; CPU results do not prove them.
+The CPU adapter is `src/pattern_import.rs`; the native review modal lives in
+`src/atelier/css_runner/ui/import_dialog.rs`, with source loading, preview and
+application in `src/atelier/css_runner/imports.rs`. It commits through the
+existing document/history adapter. CPU tests drive the real modal tree and
+installer; native OS picker, GPU rendering and visual acceptance require a
+separate window run and are not proven by CPU results.

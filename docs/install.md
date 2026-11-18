@@ -152,13 +152,9 @@ The smoke therefore does not certify a physical GPU, driver version, file-dialog
 desktop session. If no usable wgpu adapter or window is available, the smoke
 step fails; the CPU package checks remain valid evidence only.
 
-The longer `--ui-authoring-smoke` pointer suite was removed with the egui UI
-(FC-0022); the flag now exits with an error, so it is not part of any check.
-Historically it was deliberately not part of the hosted check. Its fixed 40-55 second frame budget cannot complete at a
-supported editor layout on a software adapter; the 1100x700 minimum also makes
-its rectangle drag self-intersect. Run that suite manually on a
-hardware-accelerated Windows desktop before claiming full pointer/authoring
-acceptance.
+FC-0022 removed the longer pointer suite with the egui UI.
+`--ui-authoring-smoke` now exits with an error. Use the manual desktop checks
+below for pointer and authoring acceptance.
 
 On an actual Windows desktop, perform the following before calling this a
 clean-machine GUI release:

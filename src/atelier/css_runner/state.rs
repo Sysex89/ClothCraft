@@ -5,9 +5,11 @@ use super::super::{DocumentFiles, perf};
 use super::actions::RunnerAction;
 use super::board::geometry::fit_2d_board;
 use super::board::types::{Drag2d, Hover2dTarget, ToolDraft2d};
+use super::imports::ImportDialog;
 use super::mesh_preparation;
 use clothcraft::authoring::corner_tool::CIRCLE_TENSION;
 use clothcraft::authoring::{CornerRule, History};
+use clothcraft::avatar_import::StagedAvatar;
 use clothcraft::css_ui::{Theme, ViewLayoutMode};
 use clothcraft::fitting::{FittingProject, FittingScene};
 use clothcraft::garment::GarmentTemplate;
@@ -47,6 +49,13 @@ pub struct CssRunnerState {
     pub smoke: bool,
     pub smoke_done: std::rc::Rc<std::cell::Cell<bool>>,
     pub usd_scene: Option<cssimpler::renderer::gpu::usd::UsdScene>,
+    pub import_dialog: Option<ImportDialog>,
+    pub import_tolerance_mm: f64,
+    pub import_mesh_mm: f64,
+    /// Zero means the DXF header units are used.
+    pub import_scale_mm_per_unit: f64,
+    /// Keeps the imported avatar's canonical OBJ alive for Save.
+    pub staged_avatar: Option<StagedAvatar>,
     pub project: FittingProject,
     pub preview_template: Option<GarmentTemplate>,
     pub history: History,
@@ -66,6 +75,7 @@ pub struct CssRunnerState {
     pub last_metrics: Option<VbdMetrics>,
     pub camera: Camera,
     pub theme: Theme,
+    pub shading: clothcraft::usd_scene::ShadingMode,
     pub layout_mode: ViewLayoutMode,
     pub active_category: ObjectCategory,
     pub active_3d_tool: String,
@@ -145,6 +155,11 @@ impl CssRunnerState {
             smoke: false,
             smoke_done: Default::default(),
             usd_scene: None,
+            import_dialog: None,
+            import_tolerance_mm: 0.1,
+            import_mesh_mm: 25.0,
+            import_scale_mm_per_unit: 0.0,
+            staged_avatar: None,
             project,
             preview_template: None,
             history: History::default(),
@@ -164,6 +179,7 @@ impl CssRunnerState {
             last_metrics: None,
             camera,
             theme: Theme::Dark,
+            shading: clothcraft::usd_scene::ShadingMode::Smooth,
             layout_mode: ViewLayoutMode::Split,
             active_category: ObjectCategory::Pattern2D,
             active_3d_tool: "Gizmo".to_string(),
@@ -291,16 +307,30 @@ impl CssRunnerState {
     }
 
     pub fn sync_usd_points(&mut self) {
-        if let Some(scene) = &self.usd_scene {
-            for panel in &self.scene.garment.panels {
-                if let Err(error) = clothcraft::usd_scene::update_viewport_points(
-                    scene,
-                    &clothcraft::usd_scene::viewport_panel_path(&panel.id),
-                    &self.scene.state.x[panel.vertices.clone()],
-                ) {
-                    self.status_message = format!("USD update error: {error}");
-                }
-            }
+        if let Some(scene) = &self.usd_scene
+            && let Err(error) = clothcraft::usd_scene::update_panel_viewport_positions(
+                scene,
+                &self.scene.garment,
+                &self.scene.state,
+                self.shading,
+            )
+        {
+            self.status_message = format!("USD update error: {error}");
+        }
+    }
+
+    /// Re-apply the current shading mode to the garment and collision display meshes.
+    pub fn sync_usd_shading(&mut self) {
+        if let Some(scene) = &self.usd_scene
+            && let Err(error) = clothcraft::usd_scene::apply_viewport_shading(
+                scene,
+                &self.scene.garment,
+                &self.scene.state,
+                Some(self.scene.collider.surface.as_ref()),
+                self.shading,
+            )
+        {
+            self.status_message = format!("USD shading error: {error}");
         }
     }
 

@@ -242,6 +242,7 @@ pub fn apply(state: &mut CssRunnerState, physics: bool) -> Result<(), String> {
             usd,
             &state.scene.garment,
             &state.scene.state,
+            state.shading,
         );
     }
     state.send_control_state(false);

@@ -1,6 +1,6 @@
 # Static avatar import
 
-Use **File → Import avatar… → Choose file…** to select a local OBJ, glTF or GLB.
+Use **Assets & Pieces → Import → Avatar** in the fitting editor, then **Choose…** to select a local OBJ, glTF or GLB.
 The confirmation shows the source, vertex and triangle counts, bounding box,
 dimensions in metres and geometry-loss warnings. The action row stays outside
 the scrolling details, including at 480 × 360.
@@ -51,13 +51,14 @@ worker, mesh simplification and native visual acceptance remain future work.
 ## Tests and handoff
 
 `src/avatar_import.rs` owns staging and candidate preparation, independently of
-egui/wgpu. `atelier/avatar_import_ui.rs` owns the confirmation controls;
-`documents_ui.rs` installs the candidate and retains the staged asset. The
-existing `atelier.rs` worker-generation contract is reused without modification.
+egui/wgpu. `src/atelier/css_runner/ui/import_dialog.rs` owns the confirmation
+controls; `src/atelier/css_runner/imports.rs` installs the candidate and retains
+the staged asset. The existing worker-generation contract is reused without
+modification.
 
 ```sh
 cargo test --locked --no-default-features -j 2 --test avatar_import -- --test-threads=2
-cargo test --locked -j 2 --bin cloth-fit named_widgets_avatar -- --test-threads=2
+cargo test --locked -j 2 --lib atelier::css_runner::tests::imports -- --test-threads=2
 ```
 
 The CPU fixtures independently specify transformed coordinates and winding,

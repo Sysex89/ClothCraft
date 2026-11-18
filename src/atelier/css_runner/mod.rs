@@ -10,6 +10,7 @@ mod app;
 mod board;
 mod documents;
 mod editing;
+pub mod imports;
 mod input;
 mod mesh_preparation;
 mod placement;

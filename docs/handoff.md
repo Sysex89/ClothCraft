@@ -1,5 +1,32 @@
 # Repository handoff
 
+## Functional native import dialogs — 18 November 2026
+
+The fitting editor's left-browser **DXF**, **SVG** and **Avatar** import buttons
+now open reviewed native modals instead of printing "use the CLI" status notes.
+DXF and SVG parse the chosen file, show units/scale, curve tolerance, mesh
+spacing, conversion losses and a scaled outline preview; the reviewer selects
+closed outlines, chooses an existing fabric and acknowledges the excluded data
+before one undoable authoring edit is installed. Avatar import confirms vertex
+and triangle counts, bounds and geometry warnings before replacing the static
+collider; it keeps authored patterns, seams, materials and placement, resets the
+drape and undo history, advances the worker generation and updates the USD
+collider display. The staged OBJ stays alive for Save.
+
+Files: `src/atelier/css_runner/imports.rs` (CPU adaptation, installation and
+avatar staging) and `src/atelier/css_runner/ui/import_dialog.rs` (modal and
+preview). Entry points were updated in [pattern import](pattern-import.md),
+[SVG import](svg-import.md), [avatar import](avatar-import.md) and
+[interoperability](interoperability.md).
+
+Observed validation: 162 library tests passed with 8 ignored (including nine
+new import regressions that drive the real modal, row/acknowledgement callbacks,
+browser wiring and installer), 11 USD scene tests passed, strict all-target Clippy with warnings
+denied and `cargo fmt --check` passed, and both the CPU-only check and desktop
+binary build passed. A headless RGBA capture of the open DXF modal was inspected
+for layout and preview rendering. No native OS picker or GPU window run was
+performed; that remains explicit visual acceptance.
+
 ## Native mesh preparation controls — 17 November 2026 (FC-0064)
 
 The active garment runner now exposes a collapsed Mesh preparation accordion:

@@ -457,14 +457,24 @@ impl CssEditorState {
     }
 
     pub fn sync_usd_points(&mut self) {
-        if let Some(scene) = &self.usd_scene
-            && let Err(error) = clothcraft::usd_scene::update_viewport_points(
+        if let Some(scene) = &self.usd_scene {
+            let path = "/World/Garment/cloth_mesh";
+            if let Err(error) =
+                clothcraft::usd_scene::update_viewport_points(scene, path, &self.state.x)
+            {
+                self.status_message = format!("USD update error: {error}");
+            }
+            let triangles: Vec<[usize; 3]> =
+                self.mesh.triangles.iter().map(|tri| tri.vertices).collect();
+            if let Err(error) = clothcraft::usd_scene::update_viewport_normals(
                 scene,
-                "/World/Garment/cloth_mesh",
+                path,
                 &self.state.x,
-            )
-        {
-            self.status_message = format!("USD update error: {error}");
+                &triangles,
+                clothcraft::usd_scene::ShadingMode::Smooth,
+            ) {
+                self.status_message = format!("USD normals error: {error}");
+            }
         }
     }
 

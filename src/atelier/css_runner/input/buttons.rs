@@ -3,15 +3,15 @@
 use super::super::board::corners::{clamp_fillet_radius_m, connected_batch_fillet_max_radius_m};
 use super::super::board::geometry::{
     board_to_panel_pt, compute_2d_view_box_m, compute_2d_viewport_rect, dist_point_to_segment,
-    panel_edge_length_m, panel_raw_points, panel_to_board_pt, screen_to_board_m,
-    screen_to_board_unclamped_m, viewport_3d_rect,
+    panel_raw_points, panel_to_board_pt, screen_to_board_m, screen_to_board_unclamped_m,
+    viewport_3d_rect,
 };
 use super::super::board::hit_testing::{hit_test_2d, measurement_pick};
 use super::super::board::selection::{batch_corners_for_points, effective_selected_points};
 use super::super::board::types::{Drag2d, Hover2dTarget, ToolDraft2d};
 use super::super::editing::{
     commit_authoring_command, default_fabric_id, finish_internal_line_draft, finish_pen_draft,
-    round_corners_batch, sew_confirm_prompt,
+    round_corners_batch, sew_boundary_length, sew_confirm_prompt,
 };
 use super::super::state::CssRunnerState;
 use clothcraft::authoring::corner_tool::{
@@ -32,7 +32,11 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
             state: btn_state,
             ..
         } => {
-            if state.settings_open || state.command_palette_open || state.solver_menu_open {
+            if state.settings_open
+                || state.command_palette_open
+                || state.solver_menu_open
+                || state.import_dialog.is_some()
+            {
                 return false;
             }
             let canvas_2d = compute_2d_viewport_rect(state);
@@ -60,7 +64,11 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
             state: btn_state,
             modifiers,
         } => {
-            if state.settings_open || state.command_palette_open || state.solver_menu_open {
+            if state.settings_open
+                || state.command_palette_open
+                || state.solver_menu_open
+                || state.import_dialog.is_some()
+            {
                 return false;
             }
             if modifiers.shift || modifiers.control || modifiers.super_key {
@@ -239,18 +247,9 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                                                     .into();
                                             return true;
                                         }
-                                        let length = |panel: &str, edge: &str| {
-                                            state
-                                                .project
-                                                .template
-                                                .panels
-                                                .iter()
-                                                .find(|p| p.id == panel)
-                                                .and_then(|p| panel_edge_length_m(p, edge))
-                                        };
                                         let (Some(a_len_m), Some(b_len_m)) = (
-                                            length(&first_pid, &first_edge),
-                                            length(&pid, &edge_name),
+                                            sew_boundary_length(state, &first_pid, &first_edge),
+                                            sew_boundary_length(state, &pid, &edge_name),
                                         ) else {
                                             state.draft_2d = None;
                                             state.status_message =

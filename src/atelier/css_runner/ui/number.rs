@@ -1,6 +1,7 @@
 //! Shared native numeric editor for adjustable workspace values.
 use super::super::{
     actions::{RunnerAction, RunnerUiOp},
+    placement::{PlacementAxis, placement_value},
     state::CssRunnerState,
 };
 use cssimpler::{core::Node, ui};
@@ -11,6 +12,7 @@ pub enum NumberField {
     ZoomSpeed,
     CornerRadius,
     CornerTension,
+    Placement(PlacementAxis),
 }
 
 pub(in super::super) fn number_field(state: &CssRunnerState, id: &str, field: NumberField) -> Node {
@@ -18,6 +20,7 @@ pub(in super::super) fn number_field(state: &CssRunnerState, id: &str, field: Nu
         NumberField::ZoomSpeed => state.board_2d_zoom_speed,
         NumberField::CornerRadius => state.corner_radius_mm,
         NumberField::CornerTension => state.corner_tension,
+        NumberField::Placement(axis) => placement_value(state, axis),
     };
     let (_, _, _, title) = field.spec();
     let drag = state.number_drag.clone();
@@ -80,6 +83,10 @@ impl NumberField {
             Self::ZoomSpeed => (0.25, 4.0, 0.25, "2D zoom speed (×)"),
             Self::CornerRadius => (1.0, 250.0, 1.0, "Corner radius (mm)"),
             Self::CornerTension => (0.05, 1.5, 0.05, "Corner tension"),
+            Self::Placement(axis) if axis.is_rotation() => {
+                (-180.0, 180.0, 1.0, "Piece rotation (degrees)")
+            }
+            Self::Placement(_) => (-300.0, 300.0, 0.5, "Piece position (cm)"),
         }
     }
 }

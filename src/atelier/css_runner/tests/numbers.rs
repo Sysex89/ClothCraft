@@ -2,6 +2,7 @@
 use super::super::{
     actions::{RunnerUiOp, apply_runner_ui_op, update_runner},
     input::{handle_runner_event, number::tick_number_drag},
+    placement::{PlacementAxis, placement_value},
     ui::number::{NumberField, number_field},
 };
 use super::support::{pointer_btn_ev, pointer_move_ev, selection_test_state};
@@ -148,12 +149,23 @@ fn numeric_input_uses_native_text_editing_and_clamps_model_values() {
         (NumberField::ZoomSpeed, 99.0, 4.0),
         (NumberField::CornerRadius, -5.0, 1.0),
         (NumberField::CornerTension, 5.0, 1.5),
+        (
+            NumberField::Placement(PlacementAxis::TranslationX),
+            999.0,
+            300.0,
+        ),
+        (
+            NumberField::Placement(PlacementAxis::RotationZ),
+            -400.0,
+            -180.0,
+        ),
     ] {
         apply_runner_ui_op(app.state_mut(), RunnerUiOp::SetNumber(field, value));
         let actual = match field {
             NumberField::ZoomSpeed => app.state().board_2d_zoom_speed,
             NumberField::CornerRadius => app.state().corner_radius_mm,
             NumberField::CornerTension => app.state().corner_tension,
+            NumberField::Placement(axis) => placement_value(app.state(), axis),
         };
         assert_eq!(actual, expected);
     }

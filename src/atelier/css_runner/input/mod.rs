@@ -36,6 +36,20 @@ pub fn handle_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> b
 fn route_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
     use std::sync::atomic::Ordering;
     let text_editing = state.numeric_input_active.load(Ordering::Relaxed);
+    // A pending Arrange edit is committed before a new press can change the
+    // selection, because Command::Place selects the piece it places.
+    if state.placement_draft.is_some()
+        && matches!(
+            event,
+            EngineEvent::PointerButton {
+                state: cssimpler::renderer::ButtonState::Pressed,
+                ..
+            }
+        )
+        && state.number_drag.lock().unwrap().active.is_none()
+    {
+        super::placement::commit_placement_draft(state);
+    }
     if number::handle_number_event(state, event) {
         return true;
     }
@@ -66,6 +80,11 @@ fn route_runner_event(state: &mut CssRunnerState, event: &EngineEvent) -> bool {
         return false;
     }
     if matches!(event, EngineEvent::Key(_)) && text_editing {
+        // Enter applies a typed placement; the text field keeps focus.
+        if matches!(event, EngineEvent::Key(k) if k.state == cssimpler::renderer::ButtonState::Pressed && k.logical_key == cssimpler::renderer::KeyIdentity::Named("Enter".into()))
+        {
+            super::placement::commit_placement_draft(state);
+        }
         return false;
     }
     match event {

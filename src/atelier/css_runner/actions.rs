@@ -212,6 +212,7 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
         state.clear_2d_subselection();
         state.piece_selected_explicitly = true;
     }
+    let placement_committed = super::placement::commit_finished_placement_draft(state);
 
     let selected_mesh_panel = state
         .project
@@ -222,7 +223,12 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
         state.mesh_draft = mesh_preparation::MeshDraft::from_panel(selected_mesh_panel);
     }
 
-    if number_changed || input_changed || had_actions || (had_result && !state.playing) {
+    if number_changed
+        || placement_committed
+        || input_changed
+        || had_actions
+        || (had_result && !state.playing)
+    {
         Invalidation::Structure
     } else if had_result {
         Invalidation::Paint
@@ -407,6 +413,10 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
                     state.corner_tension = value.clamp(0.05, 1.5);
                     state.corner_mode_radius = false;
                     state.corner_preview_active = true;
+                }
+                NumberField::Placement(axis) => {
+                    let (min, max, _, _) = field.spec();
+                    super::placement::set_placement_draft(state, axis, value.clamp(min, max));
                 }
             }
         }

@@ -8,6 +8,7 @@ use super::super::super::board::selection::{
 };
 use super::super::super::board::types::ToolDraft2d;
 use super::super::super::editing::sew_lengths_equal;
+use super::super::super::placement::PlacementAxis;
 use super::super::super::state::CssRunnerState;
 use super::super::number::{NumberField, number_field};
 use clothcraft::authoring::CornerRule;
@@ -409,7 +410,28 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
         </div>
     };
 
-    // Accordion 2: 3D Arrangement
+    // Accordion 2: 3D Arrangement. Each field edits a draft that becomes one
+    // Command::Place when the drag or text edit ends (see `placement`).
+    let arrange_rows: Vec<Node> = PlacementAxis::ALL
+        .into_iter()
+        .map(|axis| {
+            let (id, label) = match axis {
+                PlacementAxis::TranslationX => ("arrange-tx", "Translation X (cm)"),
+                PlacementAxis::TranslationY => ("arrange-ty", "Translation Y (cm)"),
+                PlacementAxis::TranslationZ => ("arrange-tz", "Translation Z (cm)"),
+                PlacementAxis::RotationX => ("arrange-rx", "Rotation X (°)"),
+                PlacementAxis::RotationY => ("arrange-ry", "Rotation Y (°)"),
+                PlacementAxis::RotationZ => ("arrange-rz", "Rotation Z (°)"),
+            };
+            ui! {
+                <div class="prop-row">
+                    <span class="prop-label">{label}</span>
+                    {number_field(state, id, NumberField::Placement(axis))}
+                </div>
+            }
+        })
+        .collect();
+
     let acc_arrange = ui! {
         <div class={if open_2 { "accordion open" } else { "accordion collapsed" }}>
             <button class="accordion-header" onclick_shared={queue_action(&state.actions, RunnerAction::Accordion(2))}>
@@ -419,25 +441,7 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
             {if open_2 {
                 ui! {
                     <div class="accordion-content">
-                        <div class="prop-row">
-                            <span class="prop-label">"Translation X"</span>
-                            <span class="prop-value">{format!("{:.1} cm", selected_panel.map_or(0.0, |p| p.placement.translation.x * 100.0))}</span>
-                        </div>
-                        <div class="prop-row">
-                            <span class="prop-label">"Translation Y"</span>
-                            <span class="prop-value">{format!("{:.1} cm", selected_panel.map_or(0.0, |p| p.placement.translation.y * 100.0))}</span>
-                        </div>
-                        <div class="prop-row">
-                            <span class="prop-label">"Translation Z"</span>
-                            <span class="prop-value">{format!("{:.1} cm", selected_panel.map_or(0.0, |p| p.placement.translation.z * 100.0))}</span>
-                        </div>
-                        <div class="prop-row">
-                            <span class="prop-label">"Rotation (X/Y/Z)"</span>
-                            <span class="prop-value">{format!("{:.0}°/{:.0}°/{:.0}°",
-                                selected_panel.map_or(0.0, |p| p.placement.rotation_degrees.x),
-                                selected_panel.map_or(0.0, |p| p.placement.rotation_degrees.y),
-                                selected_panel.map_or(0.0, |p| p.placement.rotation_degrees.z))}</span>
-                        </div>
+                        {arrange_rows}
                     </div>
                 }
             } else {

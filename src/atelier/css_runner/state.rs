@@ -80,6 +80,8 @@ pub struct CssRunnerState {
     /// removes the panel only in that case, so repeated Delete presses after a
     /// point deletion never escalate to the panel that is always highlighted.
     pub piece_selected_explicitly: bool,
+    /// Uncommitted Arrange field edit; see `placement`.
+    pub placement_draft: Option<super::placement::PlacementDraft>,
     pub selected_2d_point: Option<(String, usize)>,
     pub selected_2d_points: Vec<(String, usize)>,
     pub selected_2d_edge: Option<(String, String)>,
@@ -172,6 +174,7 @@ impl CssRunnerState {
             left_drawer_open: true,
             selected_piece_index: 0,
             piece_selected_explicitly: false,
+            placement_draft: None,
             selected_2d_point: None,
             selected_2d_points: Vec::new(),
             selected_2d_edge: None,

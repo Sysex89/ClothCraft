@@ -114,6 +114,8 @@ pub(in super::super) fn handle_number_event(
             }
             if state.numeric_input_active.swap(false, Ordering::Relaxed) {
                 state.settings_open = false;
+                // Escape leaves the field without applying a typed placement.
+                state.placement_draft = None;
                 consumed = false;
             }
         }

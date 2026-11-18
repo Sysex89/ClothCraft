@@ -107,7 +107,8 @@ mod platform {
         pub fn new() -> Option<Self> {
             // XWayland cannot promise unrestricted pointer warping. Use ordinary
             // in-window deltas there rather than silently losing physical motion.
-            if std::env::var_os("WAYLAND_DISPLAY").is_some() {
+            // The XWayland fallback removes WAYLAND_DISPLAY, so ask display_backend.
+            if clothcraft::display_backend::wayland_session() {
                 return None;
             }
             let (connection, screen) = x11rb::connect(None).ok()?;

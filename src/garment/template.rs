@@ -232,9 +232,10 @@ impl GarmentTemplate {
         self.measurement_bits.unwrap_or(8)
     }
     pub fn load(path: &Path) -> Result<Self, String> {
-        let template: Self =
-            serde_json::from_str(&fs::read_to_string(path).map_err(|e| e.to_string())?)
-                .map_err(|e| e.to_string())?;
+        let data = fs::read_to_string(path)
+            .map_err(|e| format!("Cannot read template {}: {e}", path.display()))?;
+        let template: Self = serde_json::from_str(&data)
+            .map_err(|e| format!("Cannot parse template {}: {e}", path.display()))?;
         template.compile()?;
         Ok(template)
     }

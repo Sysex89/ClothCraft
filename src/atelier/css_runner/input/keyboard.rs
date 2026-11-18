@@ -100,6 +100,7 @@ pub(in super::super) fn handle_keyboard(state: &mut CssRunnerState, event: &Engi
                         let count = state.project.template.panels.len().max(1);
                         state.selected_piece_index = (state.selected_piece_index + 1) % count;
                         state.clear_2d_subselection();
+                        state.piece_selected_explicitly = true;
                         if let Some(p) = state
                             .project
                             .template
@@ -115,6 +116,7 @@ pub(in super::super) fn handle_keyboard(state: &mut CssRunnerState, event: &Engi
                         state.selected_piece_index =
                             (state.selected_piece_index + count - 1) % count;
                         state.clear_2d_subselection();
+                        state.piece_selected_explicitly = true;
                         if let Some(p) = state
                             .project
                             .template
@@ -167,6 +169,10 @@ pub(in super::super) fn handle_keyboard(state: &mut CssRunnerState, event: &Engi
                             state.clear_2d_subselection();
                             return true;
                         }
+                        if state.piece_selected_explicitly {
+                            state.piece_selected_explicitly = false;
+                            return true;
+                        }
                     }
                     if name == "Delete" || name == "Backspace" {
                         let sel_pts = effective_selected_points(state);
@@ -188,6 +194,22 @@ pub(in super::super) fn handle_keyboard(state: &mut CssRunnerState, event: &Engi
                             ) {
                                 state.clear_2d_subselection();
                             }
+                            return true;
+                        } else if state.piece_selected_explicitly
+                            && state.draft_2d.is_none()
+                            && state.drag_2d.is_none()
+                            && let Some(p) = state
+                                .project
+                                .template
+                                .panels
+                                .get(state.selected_piece_index)
+                        {
+                            let (panel, name) = (p.id.clone(), p.name.clone());
+                            commit_authoring_command(
+                                state,
+                                Command::RemovePanel { panel },
+                                format!("Deleted piece {name}"),
+                            );
                             return true;
                         }
                     }

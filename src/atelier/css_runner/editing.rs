@@ -38,6 +38,7 @@ pub(super) fn install_authoring_edit(
     if let Some(old) = record_old {
         state.history.record(old);
     }
+    state.piece_selected_explicitly = false;
     let next_garment = Arc::new(edit.garment.clone());
     let next_state = if edit.reset_simulation {
         edit.state_after(&state.scene.garment, &state.scene.state)

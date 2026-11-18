@@ -75,6 +75,11 @@ pub struct CssRunnerState {
     pub settings_open: bool,
     pub left_drawer_open: bool,
     pub selected_piece_index: usize,
+    /// True only while the most recent selection targeted the whole piece
+    /// (board body click, piece card, `[`/`]` or a piece action). Delete
+    /// removes the panel only in that case, so repeated Delete presses after a
+    /// point deletion never escalate to the panel that is always highlighted.
+    pub piece_selected_explicitly: bool,
     pub selected_2d_point: Option<(String, usize)>,
     pub selected_2d_points: Vec<(String, usize)>,
     pub selected_2d_edge: Option<(String, String)>,
@@ -166,6 +171,7 @@ impl CssRunnerState {
             settings_open: false,
             left_drawer_open: true,
             selected_piece_index: 0,
+            piece_selected_explicitly: false,
             selected_2d_point: None,
             selected_2d_points: Vec::new(),
             selected_2d_edge: None,
@@ -215,9 +221,11 @@ impl CssRunnerState {
         self.selected_2d_points.push((panel_id.clone(), point_idx));
         self.selected_2d_point = Some((panel_id, point_idx));
         self.selected_2d_edge = None;
+        self.piece_selected_explicitly = false;
     }
 
     pub fn toggle_2d_point(&mut self, panel_id: String, point_idx: usize) {
+        self.piece_selected_explicitly = false;
         if self.selected_2d_points.is_empty()
             && let Some(prev) = self.selected_2d_point.take()
         {
@@ -237,6 +245,7 @@ impl CssRunnerState {
     }
 
     pub fn clear_2d_subselection(&mut self) {
+        self.piece_selected_explicitly = false;
         self.selected_2d_points.clear();
         self.selected_2d_point = None;
         self.selected_2d_edge = None;

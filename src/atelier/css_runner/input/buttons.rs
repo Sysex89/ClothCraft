@@ -931,6 +931,7 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                                 state.selected_piece_index = panel_idx;
                                 if !multi_mod {
                                     state.clear_2d_subselection();
+                                    state.piece_selected_explicitly = true;
                                 }
                                 state.drag_2d = Some(Drag2d::Pan {
                                     start_pan: state.board_2d_pan,

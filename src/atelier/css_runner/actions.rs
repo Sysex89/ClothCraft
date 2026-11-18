@@ -205,6 +205,7 @@ pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidati
     state.action_batch = batch;
     if state.selected_piece_index != previous_piece {
         state.clear_2d_subselection();
+        state.piece_selected_explicitly = true;
     }
 
     let selected_mesh_panel = state
@@ -518,6 +519,7 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
                 let msg = format!("Selected piece: {} ({})", p.name, p.id);
                 state.selected_piece_index = idx;
                 state.clear_2d_subselection();
+                state.piece_selected_explicitly = true;
                 state.status_message = msg;
             }
         }

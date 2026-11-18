@@ -30,9 +30,7 @@ pub fn current_worker_result(done: Option<worker::Done>, generation: u64) -> Opt
 pub struct RunOptions {
     pub barrier_al: bool,
     pub smoke: bool,
-    pub drag_test: bool,
     pub perf_test: bool,
-    pub authoring_test: bool,
     pub gpu_sim: bool,
 }
 

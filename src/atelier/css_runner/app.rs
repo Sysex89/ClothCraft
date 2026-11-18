@@ -93,9 +93,7 @@ pub fn run(
     let RunOptions {
         barrier_al,
         smoke,
-        drag_test,
         perf_test,
-        authoring_test,
         gpu_sim,
     } = options;
     let stylesheet =
@@ -113,9 +111,7 @@ pub fn run(
     let mut state = CssRunnerState::new(project, scene, files, tx, latest);
     state.native_number_drag = !smoke;
     state.smoke = smoke;
-    state.drag_test = drag_test;
     state.perf_test = perf_test;
-    state.authoring_test = authoring_test;
     state.gpu_sim = gpu_sim;
     state.contact_method = if barrier_al {
         ContactMethod::BarrierAl

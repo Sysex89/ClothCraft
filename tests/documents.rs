@@ -70,3 +70,66 @@ fn template_accepts_current_format_and_rejects_unknown_format() {
     template.format = "unknown-template".into();
     assert!(template.compile().is_err());
 }
+
+/// A new document is as accessible as any other file the process creates, and
+/// replacing a document keeps the mode it already had.
+#[cfg(unix)]
+#[test]
+fn atomic_write_keeps_ordinary_and_existing_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+    let mode = |path: &std::path::Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+    let dir = tempfile::tempdir().unwrap();
+    // The umask cannot be read without changing it, so a plain create in the
+    // same directory is the reference for a new file.
+    let plain = dir.path().join("plain.json");
+    fs::write(&plain, b"plain").unwrap();
+    let file = dir.path().join("document.json");
+    atomic_write(&file, b"first").unwrap();
+    assert_eq!(mode(&file), mode(&plain));
+    for existing in [0o600, 0o640, 0o664] {
+        fs::set_permissions(&file, fs::Permissions::from_mode(existing)).unwrap();
+        atomic_write(&file, b"replacement").unwrap();
+        assert_eq!(mode(&file), existing);
+        assert_eq!(fs::read(&file).unwrap(), b"replacement");
+    }
+}
+
+/// A template or legacy project save replaces the file instead of rewriting it
+/// in place: a second link to the previous file still holds its complete bytes,
+/// which a truncating write through the shared inode would have destroyed.
+#[cfg(unix)]
+#[test]
+fn template_and_project_saves_replace_the_previous_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let previous = b"previous valid bytes";
+    let seed = |name: &str| {
+        let file = dir.path().join(name);
+        fs::write(&file, previous).unwrap();
+        let link = dir.path().join(format!("{name}.previous"));
+        fs::hard_link(&file, &link).unwrap();
+        (file, link)
+    };
+
+    let (file, link) = seed("template.json");
+    let template = GarmentTemplate::two_panel_demo();
+    template.save(&file).unwrap();
+    assert_eq!(fs::read(&link).unwrap(), previous);
+    assert_eq!(
+        fs::read(&file).unwrap(),
+        serde_json::to_vec_pretty(&template).unwrap()
+    );
+    GarmentTemplate::load(&file).unwrap();
+
+    let (file, link) = seed("project.json");
+    let project = clothcraft::project::Project::default();
+    project.save(&file).unwrap();
+    assert_eq!(fs::read(&link).unwrap(), previous);
+    assert_eq!(
+        fs::read(&file).unwrap(),
+        serde_json::to_vec_pretty(&project).unwrap()
+    );
+    clothcraft::project::Project::load(&file).unwrap();
+
+    // No temporary file is left beside the two documents and their links.
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 4);
+}

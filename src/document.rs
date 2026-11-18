@@ -5,6 +5,27 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// tempfile creates owner-only files. A document instead gets the mode of an
+/// ordinary create (0o666 masked by the umask), or keeps the mode of the file
+/// it replaces, as an in-place write would.
+#[cfg(unix)]
+fn temporary_in(parent: &Path, replaced: &Path) -> std::io::Result<tempfile::NamedTempFile> {
+    use std::os::unix::fs::PermissionsExt;
+    let temporary = tempfile::Builder::new()
+        .permissions(fs::Permissions::from_mode(0o666))
+        .tempfile_in(parent)?;
+    if let Ok(existing) = fs::metadata(replaced) {
+        temporary
+            .as_file()
+            .set_permissions(existing.permissions())?;
+    }
+    Ok(temporary)
+}
+#[cfg(not(unix))]
+fn temporary_in(parent: &Path, _replaced: &Path) -> std::io::Result<tempfile::NamedTempFile> {
+    tempfile::NamedTempFile::new_in(parent)
+}
+
 pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     atomic_write_with(path, |writer| {
         writer.write_all(bytes).map_err(|e| e.to_string())
@@ -19,7 +40,7 @@ pub(crate) fn atomic_write_with(
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
-    let mut temporary = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
+    let mut temporary = temporary_in(parent, path).map_err(|e| e.to_string())?;
     write(temporary.as_file_mut())?;
     temporary.as_file().sync_all().map_err(|e| e.to_string())?;
     temporary.persist(path).map_err(|e| e.to_string())?;

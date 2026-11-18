@@ -240,11 +240,8 @@ impl GarmentTemplate {
     }
     pub fn save(&self, path: &Path) -> Result<(), String> {
         self.compile()?;
-        fs::write(
-            path,
-            serde_json::to_string_pretty(self).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())
+        let data = serde_json::to_vec_pretty(self).map_err(|e| e.to_string())?;
+        crate::document::atomic_write(path, &data)
     }
     pub fn compile(&self) -> Result<CompiledGarment, String> {
         if !matches!(self.measurement_precision(), 8 | 10 | 16) {

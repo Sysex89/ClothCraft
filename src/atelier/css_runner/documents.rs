@@ -5,18 +5,41 @@ use clothcraft::garment::export;
 use std::fs;
 
 impl CssRunnerState {
+    /// Where Save writes: the document opened with `--project`, or
+    /// `<output>/fitting-project.json` when the session has no source file.
+    /// The flag is true for that default location.
+    pub fn save_target(&self) -> (std::path::PathBuf, bool) {
+        match &self.files.source {
+            Some(source) => (source.clone(), false),
+            None => (self.files.output.join("fitting-project.json"), true),
+        }
+    }
+
+    /// Save through `FittingProject::save` (atomic replacement, portable avatar
+    /// asset). A rejected save leaves the previous file untouched.
     pub fn save_project(&mut self) {
-        let _ = fs::create_dir_all(&self.files.output);
-        let path = self.files.output.join("fitting-project.json");
+        let (path, is_default) = self.save_target();
+        if is_default {
+            let _ = fs::create_dir_all(&self.files.output);
+        }
         let mut snapshot = self.project.clone();
         snapshot.state = Some(self.scene.state.clone());
         snapshot.simulation = Some(self.settings.clone());
         match snapshot.save(&path) {
             Ok(_) => {
                 self.project = snapshot;
-                self.status_message = format!("Saved {}", path.display());
+                self.status_message = if is_default {
+                    format!(
+                        "Saved {} (no --project file was opened; default output location)",
+                        path.display()
+                    )
+                } else {
+                    format!("Saved {}", path.display())
+                };
             }
-            Err(e) => self.status_message = format!("Save error: {e}"),
+            Err(e) => {
+                self.status_message = format!("Save error: {e}; {} was not changed", path.display())
+            }
         }
     }
 

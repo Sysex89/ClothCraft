@@ -15,6 +15,7 @@ use clothcraft::authoring::{self, Command};
 use clothcraft::fitting::FittingScene;
 use clothcraft::garment::GarmentTemplate;
 use clothcraft::garment::meshing::MeshingSettings;
+use clothcraft::garment::seam::{BoundaryRef, Side};
 use glam::DVec2;
 use std::sync::Arc;
 
@@ -405,4 +406,93 @@ pub(super) fn finish_internal_line_draft(state: &mut CssRunnerState) -> bool {
         format!("Added {count}-point internal line on {panel_id}"),
     );
     true
+}
+
+/// Same relative tolerance the seam compiler uses before it demands `allow_ease`
+/// (`garment::seam`), so the UI never offers an un-eased seam the compiler rejects.
+pub fn sew_lengths_equal(a_len_m: f64, b_len_m: f64) -> bool {
+    (a_len_m - b_len_m).abs() <= 1e-8 * a_len_m.max(b_len_m)
+}
+
+pub(super) fn sew_confirm_prompt(
+    a: &(String, String),
+    b: &(String, String),
+    a_len_m: f64,
+    b_len_m: f64,
+) -> String {
+    let lengths = format!(
+        "Sew {}.{} ({:.1} mm) ↔ {}.{} ({:.1} mm)",
+        a.0,
+        a.1,
+        a_len_m * 1e3,
+        b.0,
+        b.1,
+        b_len_m * 1e3
+    );
+    if sew_lengths_equal(a_len_m, b_len_m) {
+        format!("{lengths}: press Enter or Sew to confirm, Escape to cancel")
+    } else {
+        format!(
+            "{lengths}: lengths differ by {:.1} mm; choose Sew with easing or Escape to cancel",
+            (a_len_m - b_len_m).abs() * 1e3
+        )
+    }
+}
+
+/// Commit the pending seam. Without `ease`, unequal lengths are refused and the
+/// draft is kept so the user can still choose easing or cancel.
+pub fn confirm_pending_sew(state: &mut CssRunnerState, ease: bool) -> bool {
+    let Some(ToolDraft2d::SewConfirm {
+        a,
+        b,
+        reverse,
+        a_len_m,
+        b_len_m,
+    }) = state.draft_2d.clone()
+    else {
+        return false;
+    };
+    let equal = sew_lengths_equal(a_len_m, b_len_m);
+    if !ease && !equal {
+        state.status_message = format!(
+            "Lengths differ by {:.1} mm: choose Sew with easing to accept the mismatch, or Escape to cancel",
+            (a_len_m - b_len_m).abs() * 1e3
+        );
+        return false;
+    }
+    state.draft_2d = None;
+    let message = if equal {
+        format!("Sewed {}.{} ↔ {}.{}", a.0, a.1, b.0, b.1)
+    } else {
+        format!(
+            "Sewed {}.{} ↔ {}.{} with {:.1} mm easing",
+            a.0,
+            a.1,
+            b.0,
+            b.1,
+            (a_len_m - b_len_m).abs() * 1e3
+        )
+    };
+    commit_authoring_command(
+        state,
+        Command::Sew {
+            a: BoundaryRef {
+                reversed: false,
+                panel: a.0,
+                side: Side::Right,
+                edge: Some(a.1),
+                range: [0.0, 1.0],
+            },
+            b: BoundaryRef {
+                reversed: false,
+                panel: b.0,
+                side: Side::Left,
+                edge: Some(b.1),
+                range: [0.0, 1.0],
+            },
+            reverse,
+            ease: ease && !equal,
+        },
+        message,
+    )
 }

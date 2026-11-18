@@ -942,12 +942,19 @@ pub fn render_runner_2d_paths(state: &CssRunnerState) -> (Vec<BoardPath>, Vector
                     ));
                 }
             }
-            ToolDraft2d::Sew {
-                first_edge: Some((pid, ename)),
-            } => {
-                if let Some(pg) = panel_geos.iter().find(|g| &g.id == pid)
-                    && let Some(eidx) = pg.edge_names.iter().position(|e| e == ename)
-                {
+            ToolDraft2d::Sew { .. } | ToolDraft2d::SewConfirm { .. } => {
+                let pending: Vec<&(String, String)> = match draft {
+                    ToolDraft2d::Sew { first_edge } => first_edge.iter().collect(),
+                    ToolDraft2d::SewConfirm { a, b, .. } => vec![a, b],
+                    _ => Vec::new(),
+                };
+                for (pid, ename) in pending {
+                    let Some(pg) = panel_geos.iter().find(|g| &g.id == pid) else {
+                        continue;
+                    };
+                    let Some(eidx) = pg.edge_names.iter().position(|e| e == ename) else {
+                        continue;
+                    };
                     let (ax, ay) = pg.points[eidx];
                     let (bx, by) = pg.points[(eidx + 1) % pg.points.len()];
                     let seg_d = if let Some(c) = pg.curves.iter().find(|c| c.edge_idx == eidx) {
@@ -971,7 +978,6 @@ pub fn render_runner_2d_paths(state: &CssRunnerState) -> (Vec<BoardPath>, Vector
                     ));
                 }
             }
-            ToolDraft2d::Sew { first_edge: None } => {}
             ToolDraft2d::InternalLine {
                 panel_id,
                 points_local_m,

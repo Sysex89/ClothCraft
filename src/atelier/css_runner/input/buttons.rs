@@ -3,15 +3,15 @@
 use super::super::board::corners::{clamp_fillet_radius_m, connected_batch_fillet_max_radius_m};
 use super::super::board::geometry::{
     board_to_panel_pt, compute_2d_view_box_m, compute_2d_viewport_rect, dist_point_to_segment,
-    panel_raw_points, panel_to_board_pt, screen_to_board_m, screen_to_board_unclamped_m,
-    viewport_3d_rect,
+    panel_edge_length_m, panel_raw_points, panel_to_board_pt, screen_to_board_m,
+    screen_to_board_unclamped_m, viewport_3d_rect,
 };
 use super::super::board::hit_testing::{hit_test_2d, measurement_pick};
 use super::super::board::selection::{batch_corners_for_points, effective_selected_points};
 use super::super::board::types::{Drag2d, Hover2dTarget, ToolDraft2d};
 use super::super::editing::{
     commit_authoring_command, default_fabric_id, finish_internal_line_draft, finish_pen_draft,
-    round_corners_batch,
+    round_corners_batch, sew_confirm_prompt,
 };
 use super::super::state::CssRunnerState;
 use clothcraft::authoring::corner_tool::{
@@ -20,7 +20,6 @@ use clothcraft::authoring::corner_tool::{
 use clothcraft::authoring::{self, Command};
 use clothcraft::garment::meshing::MeshingSettings;
 use clothcraft::garment::polygon::PatternMeasurement;
-use clothcraft::garment::seam::{BoundaryRef, Side};
 use clothcraft::garment::shapes::Primitive;
 use cssimpler::renderer::EngineEvent;
 
@@ -240,31 +239,36 @@ pub(in super::super) fn handle_buttons(state: &mut CssRunnerState, event: &Engin
                                                     .into();
                                             return true;
                                         }
-                                        state.draft_2d = None;
-                                        commit_authoring_command(
-                                            state,
-                                            Command::Sew {
-                                                a: BoundaryRef {
-                                                    reversed: false,
-                                                    panel: first_pid.clone(),
-                                                    side: Side::Right,
-                                                    edge: Some(first_edge.clone()),
-                                                    range: [0.0, 1.0],
-                                                },
-                                                b: BoundaryRef {
-                                                    reversed: false,
-                                                    panel: pid.clone(),
-                                                    side: Side::Left,
-                                                    edge: Some(edge_name.clone()),
-                                                    range: [0.0, 1.0],
-                                                },
-                                                reverse,
-                                                ease: true,
-                                            },
-                                            format!(
-                                                "Sewed {first_pid}.{first_edge} ↔ {pid}.{edge_name}"
-                                            ),
-                                        );
+                                        let length = |panel: &str, edge: &str| {
+                                            state
+                                                .project
+                                                .template
+                                                .panels
+                                                .iter()
+                                                .find(|p| p.id == panel)
+                                                .and_then(|p| panel_edge_length_m(p, edge))
+                                        };
+                                        let (Some(a_len_m), Some(b_len_m)) = (
+                                            length(&first_pid, &first_edge),
+                                            length(&pid, &edge_name),
+                                        ) else {
+                                            state.draft_2d = None;
+                                            state.status_message =
+                                                "Sew: could not measure a boundary; nothing was sewn"
+                                                    .into();
+                                            return true;
+                                        };
+                                        let a = (first_pid, first_edge);
+                                        let b = (pid, edge_name);
+                                        state.status_message =
+                                            sew_confirm_prompt(&a, &b, a_len_m, b_len_m);
+                                        state.draft_2d = Some(ToolDraft2d::SewConfirm {
+                                            a,
+                                            b,
+                                            reverse,
+                                            a_len_m,
+                                            b_len_m,
+                                        });
                                         return true;
                                     } else {
                                         state.draft_2d = Some(ToolDraft2d::Sew {

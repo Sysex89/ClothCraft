@@ -104,6 +104,16 @@ pub enum ToolDraft2d {
     Sew {
         first_edge: Option<(String, String)>,
     },
+    /// Both boundaries are picked; nothing is committed until the user
+    /// confirms. Unequal lengths can only be sewn with explicit easing.
+    SewConfirm {
+        a: (String, String),
+        b: (String, String),
+        /// Traverse `b` against `a`, as for adjacent edges of one contour.
+        reverse: bool,
+        a_len_m: f64,
+        b_len_m: f64,
+    },
     InternalLine {
         panel_id: String,
         points_local_m: Vec<DVec2>,

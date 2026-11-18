@@ -1,7 +1,10 @@
 //! Queued UI actions, operation dispatch and frame updates.
 
 use super::board::interaction::set_active_2d_tool;
-use super::editing::{round_selected_corner, toggle_selected_curve, undo_redo_2d};
+use super::board::types::ToolDraft2d;
+use super::editing::{
+    confirm_pending_sew, round_selected_corner, toggle_selected_curve, undo_redo_2d,
+};
 use super::mesh_preparation;
 use super::state::{
     CssRunnerState, DEFAULT_2D_ZOOM_SPEED, MAX_2D_ZOOM_SPEED, MIN_2D_ZOOM_SPEED, ObjectCategory,
@@ -110,6 +113,8 @@ pub enum RunnerUiOp {
     SelectPiece(usize),
     LoadPreset(GarmentKind),
     StatusNote(String),
+    ConfirmSew { ease: bool },
+    CancelSew,
 }
 
 pub fn update_runner(state: &mut CssRunnerState, frame: FrameInfo) -> Invalidation {
@@ -589,6 +594,15 @@ pub(super) fn apply_runner_ui_op(state: &mut CssRunnerState, op: RunnerUiOp) {
         }
         RunnerUiOp::StatusNote(msg) => {
             state.status_message = msg;
+        }
+        RunnerUiOp::ConfirmSew { ease } => {
+            confirm_pending_sew(state, ease);
+        }
+        RunnerUiOp::CancelSew => {
+            if matches!(state.draft_2d, Some(ToolDraft2d::SewConfirm { .. })) {
+                state.draft_2d = None;
+                state.status_message = "Sewing cancelled; no seam was added".into();
+            }
         }
     }
 }

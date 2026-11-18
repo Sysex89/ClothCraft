@@ -6,6 +6,8 @@ use super::super::super::board::geometry::panel_edge_length_m;
 use super::super::super::board::selection::{
     compute_connected_2d_highlight, effective_selected_points,
 };
+use super::super::super::board::types::ToolDraft2d;
+use super::super::super::editing::sew_lengths_equal;
 use super::super::super::state::CssRunnerState;
 use super::super::number::{NumberField, number_field};
 use clothcraft::authoring::CornerRule;
@@ -300,6 +302,45 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
         "cad-prop-btn"
     };
 
+    let sew_confirm_card = match &state.draft_2d {
+        Some(ToolDraft2d::SewConfirm {
+            a,
+            b,
+            a_len_m,
+            b_len_m,
+            ..
+        }) => {
+            let equal = sew_lengths_equal(*a_len_m, *b_len_m);
+            let difference = format!("{:.1} mm", (a_len_m - b_len_m).abs() * 1e3);
+            let (confirm_label, confirm_ease) = if equal {
+                ("Sew", false)
+            } else {
+                ("Sew with easing", true)
+            };
+            ui! {
+                <div id="sew-confirm-card" class="card sew-confirm-card">
+                    <div class="prop-row">
+                        <span class="prop-label">{format!("{}.{}", a.0, a.1)}</span>
+                        <span class="prop-value">{format!("{:.1} mm", a_len_m * 1e3)}</span>
+                    </div>
+                    <div class="prop-row">
+                        <span class="prop-label">{format!("{}.{}", b.0, b.1)}</span>
+                        <span class="prop-value">{format!("{:.1} mm", b_len_m * 1e3)}</span>
+                    </div>
+                    <div class="prop-row">
+                        <span class="prop-label">"Length difference"</span>
+                        <span class="prop-value">{if equal { "None".to_string() } else { difference }}</span>
+                    </div>
+                    <div class="quick-actions-row">
+                        <button id="btn-sew-confirm" class="btn-action btn-action-accent" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::ConfirmSew { ease: confirm_ease })}>{confirm_label}</button>
+                        <button id="btn-sew-cancel" class="btn-action" onclick_shared={queue_ui_op(&state.actions, RunnerUiOp::CancelSew)}>"Cancel"</button>
+                    </div>
+                </div>
+            }
+        }
+        _ => ui! { <span class="hidden" /> },
+    };
+
     let acc_line = ui! {
         <div class={if open_1 { "accordion open" } else { "accordion collapsed" }}>
             <button class="accordion-header" onclick_shared={queue_action(&state.actions, RunnerAction::Accordion(1))}>
@@ -309,6 +350,7 @@ pub(in super::super::super) fn build_runner_property_accordions(state: &CssRunne
             {if open_1 {
                 ui! {
                     <div class="accordion-content">
+                        {sew_confirm_card}
                         <div class="prop-row">
                             <span class="prop-label">"2D Selection"</span>
                             <span class="prop-value">{sel_info.0}</span>

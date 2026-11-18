@@ -5,6 +5,7 @@ pub(super) mod board;
 pub(super) mod inspector;
 pub(super) mod documents;
 pub(super) mod settings;
+pub(super) mod sewing;
 pub(super) mod shell;
 pub(super) mod simulation;
 pub(super) mod support;

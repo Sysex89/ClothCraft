@@ -11,8 +11,10 @@ use super::super::board::interaction::set_active_2d_tool;
 use super::super::board::native::BoardPath;
 use super::super::board::rendering::render_runner_2d_paths;
 use super::super::board::selection::compute_connected_2d_highlight;
-use super::super::board::types::Hover2dTarget;
-use super::super::editing::{round_selected_corner, toggle_selected_curve, undo_redo_2d};
+use super::super::board::types::{Hover2dTarget, ToolDraft2d};
+use super::super::editing::{
+    round_selected_corner, sew_lengths_equal, toggle_selected_curve, undo_redo_2d,
+};
 use super::super::input::handle_runner_event;
 use super::super::state::CssRunnerState;
 use super::super::ui::shell::build_runner_ui;
@@ -805,7 +807,8 @@ fn test_2d_interactive_rail_tools_workflow() {
     assert!(handle_runner_event(&mut state, &pointer_btn_ev(false)));
     assert!(state.status_message.contains("mm"));
 
-    // 6. Sew tool: click first edge on rect panel and second edge on pen panel -> creates new seam
+    // 6. Sew tool: click first edge on rect panel and second edge on pen panel -> pending
+    //    confirmation; the seam exists only after an explicit confirm.
     let seams_before = state.project.template.seams.len();
     set_active_2d_tool(&mut state, "Sew");
     let p_rect = state.project.template.panels[initial_panels]
@@ -835,6 +838,21 @@ fn test_2d_interactive_rail_tools_workflow() {
     handle_runner_event(&mut state, &pointer_move_ev(spx, spy));
     assert!(handle_runner_event(&mut state, &pointer_btn_ev(true)));
     assert!(handle_runner_event(&mut state, &pointer_btn_ev(false)));
+    assert_eq!(state.project.template.seams.len(), seams_before);
+    let Some(ToolDraft2d::SewConfirm {
+        a_len_m, b_len_m, ..
+    }) = state.draft_2d.clone()
+    else {
+        panic!("second pick must wait for confirmation");
+    };
+    let (svg_sew, _) = render_runner_2d_paths(&state);
+    assert!(count_class(&svg_sew, "tool-draft-sew") >= 2);
+    apply_runner_ui_op(
+        &mut state,
+        RunnerUiOp::ConfirmSew {
+            ease: !sew_lengths_equal(a_len_m, b_len_m),
+        },
+    );
     assert_eq!(state.project.template.seams.len(), seams_before + 1);
     assert!(!state.project.template.seams.last().unwrap().reverse_b);
 
@@ -894,6 +912,11 @@ fn sewing_dart_legs_pairs_the_tip_and_closes_the_mouth_in_either_click_order() {
             assert!(handle_runner_event(&mut state, &pointer_btn_ev(true)));
             assert!(handle_runner_event(&mut state, &pointer_btn_ev(false)));
         }
+        // Equal legs: an explicit plain confirmation keeps the picked direction.
+        assert!(state.scene.garment.seams.is_empty());
+        assert!(super::super::editing::confirm_pending_sew(
+            &mut state, false
+        ));
         let garment = &state.scene.garment;
         let seam = &garment.seams[0];
         // In the open dart the largest gap is the 100 mm mouth. Folding
